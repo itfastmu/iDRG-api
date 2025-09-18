@@ -1,9 +1,11 @@
 import Elysia, { t } from "elysia";
+
+const mode = Bun.env.MODE === "debug" ? "?mode=debug" : "";
 const forward = async (body: unknown) => {
     if (!Bun.env.EKLAIM_URL) {
         throw new Error("EKLAIM_URL environment variable is not defined");
     }
-    const res = await fetch(Bun.env.EKLAIM_URL, {
+    const res = await fetch(Bun.env.EKLAIM_URL + mode, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
