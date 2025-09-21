@@ -3,17 +3,41 @@ import { sql } from "./connection";
 
 const get = new Elysia({ prefix: '/grab' })
     .get(
-        "/list",
-        async ({ query }) => {
-            console.log('lewat', query)
-            const tanggal = query.mulai ? query.sampai ? `AND reg_periksa.tgl_registrasi BETWEEN '${query.mulai}' AND '${query.sampai}'` : `AND reg_periksa.tgl_registrasi >= '${query.mulai}'` : `AND YEAR(reg_periksa.tgl_registrasi) = YEAR(CURDATE()) AND MONTH(reg_periksa.tgl_registrasi) = MONTH(CURDATE())`;
-
+        "/list/:type?",
+        async ({ params, query }) => {
+            let tanggal = query.mulai ? query.sampai ? `AND reg_periksa.tgl_registrasi BETWEEN '${query.mulai}' AND '${query.sampai}'` : `AND reg_periksa.tgl_registrasi >= '${query.mulai}'` : `AND YEAR(reg_periksa.tgl_registrasi) = YEAR(CURDATE()) AND MONTH(reg_periksa.tgl_registrasi) = MONTH(CURDATE())`;
+            if (params.type) {
+                if (params.type === 'rajal') {
+                    tanggal += ` AND reg_periksa.status_lanjut = 'Ralan'`;
+                } else if (params.type === 'ranap') {
+                    tanggal += ` AND reg_periksa.status_lanjut = 'Ranap'`;
+                }
+            }
             const fields = "reg_periksa.no_rawat, reg_periksa.no_rkm_medis, reg_periksa.tgl_registrasi, case when status_lanjut = 'Ralan' then 'Rawat Jalan' else 'Rawat Inap' end as status, bridging_sep.no_sep, bridging_sep.no_kartu, pasien.nm_pasien, pasien.tgl_lahir, pasien.jk";
 
             const raw = await sql(`SELECT ${fields} FROM reg_periksa LEFT JOIN pasien ON reg_periksa.no_rkm_medis = pasien.no_rkm_medis LEFT JOIN bridging_sep ON reg_periksa.no_rawat = bridging_sep.no_rawat WHERE reg_periksa.kd_pj = 'BPJ' ${tanggal} ORDER BY reg_periksa.tgl_registrasi`);
             return { data: raw };
         }, {
+        params: t.Object({ type: t.Optional(t.Union([t.Literal("rajal"), t.Literal("ranap")])) }),
         query: t.Object({ mulai: t.Optional(t.String()), sampai: t.Optional(t.String()) })
+    })
+    .get(
+        "/pasien/*",
+        async ({ params }) => {
+            // const tanggal = query.mulai ? query.sampai ? `AND reg_periksa.tgl_registrasi BETWEEN '${query.mulai}' AND '${query.sampai}'` : `AND reg_periksa.tgl_registrasi >= '${query.mulai}'` : `AND YEAR(reg_periksa.tgl_registrasi) = YEAR(CURDATE()) AND MONTH(reg_periksa.tgl_registrasi) = MONTH(CURDATE())`;
+
+            const fields = `reg_periksa.no_rawat, reg_periksa.no_rkm_medis, reg_periksa.tgl_registrasi, case when status_lanjut = 'Ralan' then 'Rawat Jalan' else 'Rawat Inap' end as status, bridging_sep.no_sep, bridging_sep.no_kartu, pasien.nm_pasien, pasien.tgl_lahir, pasien.jk, MIN(STR_TO_DATE(CONCAT(k.tgl_masuk, ' ', k.jam_masuk), '%Y-%m-%d %H:%i:%s')) AS waktu_masuk_awal,
+            MAX(
+                NULLIF(
+                    STR_TO_DATE(CONCAT(k.tgl_keluar, ' ', k.jam_keluar), '%Y-%m-%d %H:%i:%s'),
+                    '0000-00-00 00:00:00'
+                )
+            ) AS waktu_keluar_akhir`;
+
+            const raw = await sql(`SELECT ${fields} FROM reg_periksa LEFT JOIN pasien ON reg_periksa.no_rkm_medis = pasien.no_rkm_medis LEFT JOIN bridging_sep ON reg_periksa.no_rawat = bridging_sep.no_rawat LEFT JOIN kamar_inap as k on reg_periksa.no_rawat = k.no_rawat WHERE reg_periksa.kd_pj = 'BPJ' AND reg_periksa.no_rawat = ? GROUP BY reg_periksa.no_rawat`, [params['*']]);
+            return { data: raw };
+        }, {
+        params: t.Object({ '*': t.RegExp(/^\d{4}\/\d{2}\/\d{2}\/\d{6}$/) })
     })
     .get(
         "/icd/:code/:type",
