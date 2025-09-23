@@ -26,16 +26,38 @@ const get = new Elysia({ prefix: '/grab' })
         async ({ params }) => {
             // const tanggal = query.mulai ? query.sampai ? `AND reg_periksa.tgl_registrasi BETWEEN '${query.mulai}' AND '${query.sampai}'` : `AND reg_periksa.tgl_registrasi >= '${query.mulai}'` : `AND YEAR(reg_periksa.tgl_registrasi) = YEAR(CURDATE()) AND MONTH(reg_periksa.tgl_registrasi) = MONTH(CURDATE())`;
 
-            const fields = `reg_periksa.no_rawat, reg_periksa.no_rkm_medis, reg_periksa.tgl_registrasi, case when status_lanjut = 'Ralan' then 'Rawat Jalan' else 'Rawat Inap' end as status, bridging_sep.no_sep, bridging_sep.no_kartu, pasien.nm_pasien, pasien.tgl_lahir, pasien.jk, MIN(STR_TO_DATE(CONCAT(k.tgl_masuk, ' ', k.jam_masuk), '%Y-%m-%d %H:%i:%s')) AS waktu_masuk_awal,
+            const fields = `r.no_rawat, r.no_rkm_medis, r.tgl_registrasi, case when status_lanjut = 'Ralan' then 'Rawat Jalan' else 'Rawat Inap' end as status, bs.no_sep, bs.no_kartu, p.nm_pasien, p.tgl_lahir, p.jk, MIN(STR_TO_DATE(CONCAT(k.tgl_masuk, ' ', k.jam_masuk), '%Y-%m-%d %H:%i:%s')) AS waktu_masuk,
             MAX(
                 NULLIF(
                     STR_TO_DATE(CONCAT(k.tgl_keluar, ' ', k.jam_keluar), '%Y-%m-%d %H:%i:%s'),
                     '0000-00-00 00:00:00'
                 )
-            ) AS waktu_keluar_akhir`;
+            ) AS waktu_keluar_akhir,
+            SUM(case when b.status IN  ('Ralan Dokter Paramedis','Ranap Dokter Paramedis') and b.nm_perawatan not like '%terapi%' then b.totalbiaya ELSE 0 END) AS prosedur_non_bedah,
+            SUM(case when b.status='Operasi' then b.totalbiaya ELSE 0 END) AS prosedur_bedah,
+            SUM(case when b.status IN ('Ralan Dokter','Ranap Dokter') then b.totalbiaya ELSE 0 END) AS konsultasi,
+            0 as tenaga_ahli,
+            SUM(case when b.status IN ('Ralan Paramedis','Ranap Paramedis') then b.totalbiaya ELSE 0 END) AS keperawatan,
+            0 as penunjang,
+            SUM(case when b.status = 'Radiologi' then b.totalbiaya ELSE 0 END) AS radiologi,
+            SUM(case when b.status = 'Laborat' then b.totalbiaya ELSE 0 END) AS laboratorium,
+            0 as pelayanan_darah,
+            SUM(case when b.status IN  ('Ralan Dokter Paramedis','Ranap Dokter Paramedis') and b.nm_perawatan like '%terapi%' then b.totalbiaya ELSE 0 END) AS rehabilitasi,
+            SUM(case when b.status = 'Kamar' then b.totalbiaya ELSE 0 END)+r.biaya_reg AS kamar,
+            0 as rawat_intensif,
+            SUM(case when b.status IN ('Obat', 'Retur Obat', 'Resep Pulang') and b.nm_perawatan not like '%kemo%' and b.nm_perawatan not like '%kronis%' then b.totalbiaya ELSE 0 END) AS obat,
+            SUM(case when b.status = 'Obat' and b.nm_perawatan like '%kronis%' then b.totalbiaya ELSE 0 END) AS obat_kronis,
+            SUM(case when b.status = 'Obat' and b.nm_perawatan like '%kemo%' then b.totalbiaya ELSE 0 END) AS obat_kemeterapi,
+            0 as alkes,
+            SUM(case when b.status = 'Tambahan' then b.totalbiaya ELSE 0 END) AS bmhp,
+            SUM(case when b.status IN ('Harian','Service') then b.totalbiaya ELSE 0 END) AS sewa_alat`;
 
-            const raw = await sql(`SELECT ${fields} FROM reg_periksa LEFT JOIN pasien ON reg_periksa.no_rkm_medis = pasien.no_rkm_medis LEFT JOIN bridging_sep ON reg_periksa.no_rawat = bridging_sep.no_rawat LEFT JOIN kamar_inap as k on reg_periksa.no_rawat = k.no_rawat WHERE reg_periksa.kd_pj = 'BPJ' AND reg_periksa.no_rawat = ? GROUP BY reg_periksa.no_rawat`, [params['*']]);
-            return { data: raw };
+            try {
+                const raw = await sql(`SELECT ${fields} FROM reg_periksa AS r LEFT JOIN pasien AS p ON r.no_rkm_medis = p.no_rkm_medis LEFT JOIN bridging_sep AS bs ON r.no_rawat = bs.no_rawat LEFT JOIN kamar_inap as k on r.no_rawat = k.no_rawat LEFT JOIN billing AS b ON r.no_rawat = b.no_rawat WHERE r.kd_pj = 'BPJ' AND r.no_rawat = ? GROUP BY r.no_rawat`, [params['*']]);
+                return { data: raw };
+            } catch (error) {
+                console.log(error);
+            }
         }, {
         params: t.Object({ '*': t.RegExp(/^\d{4}\/\d{2}\/\d{2}\/\d{6}$/) })
     })
