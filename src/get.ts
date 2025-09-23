@@ -52,7 +52,8 @@ const get = new Elysia({ prefix: '/grab' })
         async ({ params, query }) => {
             const table = params.type === 'idrg' ? 'idrg.icd_codes' : 'idrg.icd_codes_inacbg';
             const codeField = params.code === '9' ? `system LIKE 'ICD_9%'` : `system LIKE 'ICD_10%'`;
-            const keyword = query.keyword ? `AND code LIKE '${query.keyword.toUpperCase()}%' OR code2 LIKE '${query.keyword.toUpperCase()}%' OR description LIKE '%${query.keyword}%'` : '';
+            const keyword = query.keyword ? `AND (code LIKE '${query.keyword.toUpperCase()}%' OR code2 LIKE '${query.keyword.toUpperCase()}%' OR description LIKE '%${query.keyword}%')` : '';
+            console.log(`SELECT * FROM ${table} WHERE ${codeField} ${keyword} ORDER BY code2 LIMIT 50`);
             const raw = await sql(`SELECT * FROM ${table} WHERE ${codeField} ${keyword} ORDER BY code2 LIMIT 50`);
             const tambahan = params.type === 'idrg' ? 'dan jika accpdx = N maka tidak boleh dijadikan primary diagnosis"' : '';
             return {
