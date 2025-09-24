@@ -13,7 +13,7 @@ const get = new Elysia({ prefix: '/grab' })
                     tanggal += ` AND reg_periksa.status_lanjut = 'Ranap'`;
                 }
             }
-            const fields = "reg_periksa.no_rawat, reg_periksa.no_rkm_medis, reg_periksa.tgl_registrasi, case when status_lanjut = 'Ralan' then 'Rawat Jalan' else 'Rawat Inap' end as status, bridging_sep.no_sep, bridging_sep.no_kartu, pasien.nm_pasien, pasien.tgl_lahir, pasien.jk";
+            const fields = "reg_periksa.no_rawat, reg_periksa.no_rkm_medis, reg_periksa.tgl_registrasi, case when status_lanjut = 'Ralan' then 'Rawat Jalan' else 'Rawat Inap' end as status, bridging_sep.no_sep, bridging_sep.no_kartu, bridging_sep.klsrawat, pasien.nm_pasien, pasien.tgl_lahir, pasien.jk";
 
             const raw = await sql(`SELECT ${fields} FROM reg_periksa LEFT JOIN pasien ON reg_periksa.no_rkm_medis = pasien.no_rkm_medis LEFT JOIN bridging_sep ON reg_periksa.no_rawat = bridging_sep.no_rawat WHERE reg_periksa.kd_pj = 'BPJ' ${tanggal} ORDER BY reg_periksa.tgl_registrasi`);
             return { data: raw };
@@ -26,13 +26,13 @@ const get = new Elysia({ prefix: '/grab' })
         async ({ params }) => {
             // const tanggal = query.mulai ? query.sampai ? `AND reg_periksa.tgl_registrasi BETWEEN '${query.mulai}' AND '${query.sampai}'` : `AND reg_periksa.tgl_registrasi >= '${query.mulai}'` : `AND YEAR(reg_periksa.tgl_registrasi) = YEAR(CURDATE()) AND MONTH(reg_periksa.tgl_registrasi) = MONTH(CURDATE())`;
 
-            const fields = `r.no_rawat, r.no_rkm_medis, r.tgl_registrasi, case when status_lanjut = 'Ralan' then 'Rawat Jalan' else 'Rawat Inap' end as status, bs.no_sep, bs.no_kartu, p.nm_pasien, p.tgl_lahir, p.jk, MIN(STR_TO_DATE(CONCAT(k.tgl_masuk, ' ', k.jam_masuk), '%Y-%m-%d %H:%i:%s')) AS waktu_masuk,
+            const fields = `r.no_rawat, r.no_rkm_medis, r.tgl_registrasi, case when status_lanjut = 'Ralan' then 'Rawat Jalan' else 'Rawat Inap' end as status, bs.no_sep, bs.no_kartu, bs.klsrawat, bs.klsnaik, p.nm_pasien, p.tgl_lahir, p.jk, CASE WHEN n.bb IS NULL THEN '-' ELSE n.bb END AS berat, CASE WHEN tb.kesimpulan_skrining = 'Terduga TBC' THEN 1 ELSE 0 END AS tb, k.cara_pulang, d.nm_dokter as dokter MIN(STR_TO_DATE(CONCAT(k.tgl_masuk, ' ', k.jam_masuk), '%Y-%m-%d %H:%i:%s')) AS waktu_masuk,
             MAX(
                 NULLIF(
                     STR_TO_DATE(CONCAT(k.tgl_keluar, ' ', k.jam_keluar), '%Y-%m-%d %H:%i:%s'),
                     '0000-00-00 00:00:00'
                 )
-            ) AS waktu_keluar_akhir,
+            ) AS waktu_keluar,
             SUM(case when b.status IN  ('Ralan Dokter Paramedis','Ranap Dokter Paramedis') and b.nm_perawatan not like '%terapi%' then b.totalbiaya ELSE 0 END) AS prosedur_non_bedah,
             SUM(case when b.status='Operasi' then b.totalbiaya ELSE 0 END) AS prosedur_bedah,
             SUM(case when b.status IN ('Ralan Dokter','Ranap Dokter') then b.totalbiaya ELSE 0 END) AS konsultasi,
@@ -53,7 +53,7 @@ const get = new Elysia({ prefix: '/grab' })
             SUM(case when b.status IN ('Harian','Service') then b.totalbiaya ELSE 0 END) AS sewa_alat`;
 
             try {
-                const raw = await sql(`SELECT ${fields} FROM reg_periksa AS r LEFT JOIN pasien AS p ON r.no_rkm_medis = p.no_rkm_medis LEFT JOIN bridging_sep AS bs ON r.no_rawat = bs.no_rawat LEFT JOIN kamar_inap as k on r.no_rawat = k.no_rawat LEFT JOIN billing AS b ON r.no_rawat = b.no_rawat WHERE r.kd_pj = 'BPJ' AND r.no_rawat = ? GROUP BY r.no_rawat`, [params['*']]);
+                const raw = await sql(`SELECT ${fields} FROM reg_periksa AS r LEFT JOIN pasien AS p ON r.no_rkm_medis = p.no_rkm_medis LEFT JOIN bridging_sep AS bs ON r.no_rawat = bs.no_rawat LEFT JOIN kamar_inap as k on r.no_rawat = k.no_rawat LEFT JOIN billing AS b ON r.no_rawat = b.no_rawat LEFT JOIN penilaian_medis_ranap_neonatus AS n ON r.no_rawat = n.no_rawat LEFT JOIN skrining_tbc AS tb ON r.no_rawat = tb.no_rawat LEFT JOIN dokter AS d ON r.kd_dokter = d.kd_dokter WHERE r.kd_pj = 'BPJ' AND r.no_rawat = ? GROUP BY r.no_rawat`, [params['*']]);
                 return { data: raw };
             } catch (error) {
                 console.log(error);
