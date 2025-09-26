@@ -34,7 +34,7 @@ const post = new Elysia({ prefix: '/send' })
             })
             if (res.metadata.code === 200) {
                 const claim: any = await sql(`INSERT INTO idrg.claims(nomor_kartu,nomor_sep,nomor_rm,nama_pasien,tgl_lahir,gender,status_claim) VALUES('${body.data.nomor_kartu}', '${body.data.nomor_sep}', '${body.data.nomor_rm}', '${body.data.nama_pasien}', '${body.data.tgl_lahir}', '${body.data.gender}','new claim') RETURNING id`);
-                return { ...res.response, id_claim: claim.id };
+                return { ...res.response, claim_id: claim.id };
             } else {
                 return { error: res.metadata.message };
             }
