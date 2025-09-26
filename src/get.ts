@@ -26,7 +26,12 @@ const get = new Elysia({ prefix: '/grab' })
         async ({ params }) => {
             // const tanggal = query.mulai ? query.sampai ? `AND reg_periksa.tgl_registrasi BETWEEN '${query.mulai}' AND '${query.sampai}'` : `AND reg_periksa.tgl_registrasi >= '${query.mulai}'` : `AND YEAR(reg_periksa.tgl_registrasi) = YEAR(CURDATE()) AND MONTH(reg_periksa.tgl_registrasi) = MONTH(CURDATE())`;
 
-            const fields = `r.no_rawat, r.no_rkm_medis, r.tgl_registrasi, case when status_lanjut = 'Ralan' then 'Rawat Jalan' else 'Rawat Inap' end as status, bs.no_sep, bs.no_kartu, bs.klsrawat, bs.klsnaik, p.nm_pasien, p.tgl_lahir, p.jk, CASE WHEN n.bb IS NULL THEN '-' ELSE n.bb END AS berat, CASE WHEN tb.kesimpulan_skrining = 'Terduga TBC' THEN 1 ELSE 0 END AS tb, k.stts_pulang, d.nm_dokter as dokter,cl.id as claim_id, cl.status_claim, MIN(STR_TO_DATE(CONCAT(k.tgl_masuk, ' ', k.jam_masuk), '%Y-%m-%d %H:%i:%s')) AS waktu_masuk,
+            const fields = `r.no_rawat, r.no_rkm_medis, r.tgl_registrasi, case when status_lanjut = 'Ralan' then 'Rawat Jalan' else 'Rawat Inap' end as status, bs.no_sep, bs.no_kartu, bs.klsrawat, bs.klsnaik, p.nm_pasien, p.tgl_lahir, p.jk, CASE WHEN n.bb IS NULL THEN '-' ELSE n.bb END AS berat, CASE WHEN tb.kesimpulan_skrining = 'Terduga TBC' THEN 1 ELSE 0 END AS tb, k.stts_pulang, d.nm_dokter as dokter,cl.id as claim_id, cl.status_claim, 
+            CASE
+                WHEN reg_periksa.kd_poli = 'IGDK' THEN pi.td
+                ELSE pr.td
+            END AS td,
+            MIN(STR_TO_DATE(CONCAT(k.tgl_masuk, ' ', k.jam_masuk), '%Y-%m-%d %H:%i:%s')) AS waktu_masuk,
             MAX(
                 NULLIF(
                     STR_TO_DATE(CONCAT(k.tgl_keluar, ' ', k.jam_keluar), '%Y-%m-%d %H:%i:%s'),
@@ -53,7 +58,7 @@ const get = new Elysia({ prefix: '/grab' })
             SUM(case when b.status IN ('Harian','Service') then b.totalbiaya ELSE 0 END) AS sewa_alat`;
 
             try {
-                const raw = await sql(`SELECT ${fields} FROM reg_periksa AS r LEFT JOIN pasien AS p ON r.no_rkm_medis = p.no_rkm_medis LEFT JOIN bridging_sep AS bs ON r.no_rawat = bs.no_rawat LEFT JOIN kamar_inap as k on r.no_rawat = k.no_rawat LEFT JOIN billing AS b ON r.no_rawat = b.no_rawat LEFT JOIN penilaian_medis_ranap_neonatus AS n ON r.no_rawat = n.no_rawat LEFT JOIN skrining_tbc AS tb ON r.no_rawat = tb.no_rawat LEFT JOIN dokter AS d ON r.kd_dokter = d.kd_dokter LEFT JOIN idrg.claims AS cl ON bs.no_sep = cl.nomor_sep WHERE r.kd_pj = 'BPJ' AND r.no_rawat = ? GROUP BY r.no_rawat`, [params['*']]);
+                const raw = await sql(`SELECT ${fields} FROM reg_periksa AS r LEFT JOIN pasien AS p ON r.no_rkm_medis = p.no_rkm_medis LEFT JOIN bridging_sep AS bs ON r.no_rawat = bs.no_rawat LEFT JOIN kamar_inap as k on r.no_rawat = k.no_rawat LEFT JOIN billing AS b ON r.no_rawat = b.no_rawat LEFT JOIN penilaian_medis_ranap_neonatus AS n ON r.no_rawat = n.no_rawat LEFT JOIN skrining_tbc AS tb ON r.no_rawat = tb.no_rawat LEFT JOIN dokter AS d ON r.kd_dokter = d.kd_dokter LEFT JOIN idrg.claims AS cl ON bs.no_sep = cl.nomor_sep LEFT JOIN penilaian_medis_igd as pi ON r.no_rawat = pi.no_rawat LEFT JOIN penilaian_medis_ralan AS pr ON r.no_rawat = pr.no_rawat WHERE r.kd_pj = 'BPJ' AND r.no_rawat = ? GROUP BY r.no_rawat`, [params['*']]);
                 return { data: raw };
             } catch (error) {
                 console.log(error);
