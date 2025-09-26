@@ -51,7 +51,7 @@ const post = new Elysia({ prefix: '/send' })
                     "method": "set_claim_data",
                     "nomor_sep": body.data.nomor_sep
                 },
-                data: body.data
+                data: { ...body.data, coder_nik: '3315070211930002' }
             })
             if (res.metadata.code === 200) {
                 return res.response;
@@ -131,10 +131,7 @@ const post = new Elysia({ prefix: '/send' })
                     kode_tarif: t.Optional(t.String()),
                     payor_id: t.Optional(t.String()),
                     payor_cd: t.Optional(t.String()),
-                    cob_cd: t.Optional(t.Number()),
-
-                    // coder_nik wajib
-                    coder_nik: t.String(),
+                    cob_cd: t.Optional(t.Number())
                 })
 
             })
