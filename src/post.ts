@@ -64,30 +64,30 @@ const post = new Elysia({ prefix: '/send' })
             })
             if (res.metadata.code === 200) {
                 const { tarif_rs, ...claimData } = body.data;
-
                 // ambil key untuk tabel claims
                 const keys = Object.keys(claimData);
                 const values = Object.values(claimData);
                 const placeholders = keys.map(() => "?").join(",");
                 const claim: any = await sql(`INSERT INTO idrg.claims(${keys.join(",")}) VALUES(${placeholders}) RETURNING id`, values);
+                console.log(claim);
                 if (tarif_rs) {
                     const tarifKeys = Object.keys(tarif_rs);
                     const tarifValues = Object.values(tarif_rs);
 
-                    const tarifSql = `INSERT INTO tarif_rs (claim_id, ${tarifKeys.join(",")})
+                    const tarifSql = `INSERT INTO idrg.tarif_rs (claim_id, ${tarifKeys.join(",")})
                     VALUES (?, ${tarifKeys.map(() => "?").join(",")})`;
 
-                    await sql(tarifSql, [claim.id, ...tarifValues]);
+                    await sql(tarifSql, [claim[0].id, ...tarifValues]);
                 }
-                return res.response;
+                return res;
             } else {
+                console.log(res)
                 return { error: res.metadata.message };
             }
 
         },
         {
             body: t.Object({
-                claim_id: t.Number(),
                 data: t.Object({
                     nomor_sep: t.String(),
                     nomor_kartu: t.String(),
@@ -156,7 +156,7 @@ const post = new Elysia({ prefix: '/send' })
                     kode_tarif: t.Optional(t.String()),
                     payor_id: t.Optional(t.String()),
                     payor_cd: t.Optional(t.String()),
-                    cob_cd: t.Optional(t.Number())
+                    cob_cd: t.Optional(t.String())
                 })
 
             })
@@ -363,7 +363,7 @@ const post = new Elysia({ prefix: '/send' })
                     await sql(`DELETE FROM idrg.grouping_results WHERE claim_id='${body.claim_id}'`);
                     const inacbgGroup: any = await sql(`INSERT INTO idrg.grouping_results(claim_id, stage,cbg_code,cbg_description,base_tariff,tariff,kelas,inacbg_version) values('${body.claim_id}',1, '${res.response_inacb.cbg.code}', '${res.response_inacb.cbg.description}', ${res.response_inacb.base_tariff}, ${res.response_inacbg.tariff}, '${res.response_inacbg.kelas}', '${res.response_inacbg.inacbg_version}' RETURNING id`);
                     if (res.special_cmg_option) {
-                        const cmgOption = res.special_cmg_option.map((item: any) => `('${inacbgGroup.id}', '${item.cmg}', '${item.description}','${item.type}')`).join(',');
+                        const cmgOption = res.special_cmg_option.map((item: any) => `('${inacbgGroup[0].id}', '${item.cmg}', '${item.description}','${item.type}')`).join(',');
                         await sql(`INSERT INTO idrg.grouping_inacbg_special_cmg_option(grouping_inacbg_id, code, description, type) values${cmgOption}`);
                     }
                 }
