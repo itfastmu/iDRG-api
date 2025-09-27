@@ -42,8 +42,8 @@ const post = new Elysia({ prefix: '/send' })
             })
             console.log(res);
             if (res.metadata.code === 200) {
-                const claim: any = await sql(`INSERT INTO idrg.claims(nomor_kartu, nomor_sep, nomor_rm, nama_pasien, tgl_lahir, gender, status_claim) VALUES('${body.data.nomor_kartu}', '${body.data.nomor_sep}', '${body.data.nomor_rm}', '${body.data.nama_pasien}', '${body.data.tgl_lahir}', '${body.data.gender}', 'new claim') RETURNING id`);
-                return { ...res.response, claim_id: claim.id };
+                // const claim: any = await sql(`INSERT INTO idrg.claims(nomor_kartu, nomor_sep, nomor_rm, nama_pasien, tgl_lahir, gender, status_claim) VALUES('${body.data.nomor_kartu}', '${body.data.nomor_sep}', '${body.data.nomor_rm}', '${body.data.nama_pasien}', '${body.data.tgl_lahir}', '${body.data.gender}', 'new claim') RETURNING id`);
+                return { ...res.response };
             } else {
                 return { error: res.metadata.message };
             }
@@ -63,6 +63,22 @@ const post = new Elysia({ prefix: '/send' })
                 data: { ...body.data, coder_nik: '3315070211930002' }
             })
             if (res.metadata.code === 200) {
+                const { tarif_rs, ...claimData } = body.data;
+
+                // ambil key untuk tabel claims
+                const keys = Object.keys(claimData);
+                const values = Object.values(claimData);
+                const placeholders = keys.map(() => "?").join(",");
+                const claim: any = await sql(`INSERT INTO idrg.claims(${keys.join(",")}) VALUES(${placeholders}) RETURNING id`, values);
+                if (tarif_rs) {
+                    const tarifKeys = Object.keys(tarif_rs);
+                    const tarifValues = Object.values(tarif_rs);
+
+                    const tarifSql = `INSERT INTO tarif_rs (claim_id, ${tarifKeys.join(",")})
+                    VALUES (?, ${tarifKeys.map(() => "?").join(",")})`;
+
+                    await sql(tarifSql, [claim.id, ...tarifValues]);
+                }
                 return res.response;
             } else {
                 return { error: res.metadata.message };
@@ -347,8 +363,8 @@ const post = new Elysia({ prefix: '/send' })
                     await sql(`DELETE FROM idrg.grouping_results WHERE claim_id='${body.claim_id}'`);
                     const inacbgGroup: any = await sql(`INSERT INTO idrg.grouping_results(claim_id, stage,cbg_code,cbg_description,base_tariff,tariff,kelas,inacbg_version) values('${body.claim_id}',1, '${res.response_inacb.cbg.code}', '${res.response_inacb.cbg.description}', ${res.response_inacb.base_tariff}, ${res.response_inacbg.tariff}, '${res.response_inacbg.kelas}', '${res.response_inacbg.inacbg_version}' RETURNING id`);
                     if (res.special_cmg_option) {
-                        const cmgOption = res.special_cmg_option.map((item: any) => `('${inacbgGroup.id}', '${item.cmg}', '${item.description}')`).join(',');
-                        await sql(`INSERT INTO idrg.grouping_inacbg_special_cmg_option(grouping_inacbg_id, code, description) values${cmgOption}`);
+                        const cmgOption = res.special_cmg_option.map((item: any) => `('${inacbgGroup.id}', '${item.cmg}', '${item.description}','${item.type}')`).join(',');
+                        await sql(`INSERT INTO idrg.grouping_inacbg_special_cmg_option(grouping_inacbg_id, code, description, type) values${cmgOption}`);
                     }
                 }
                 return res;
@@ -378,44 +394,86 @@ const post = new Elysia({ prefix: '/send' })
 
     .post(
         "/grouping-inacbg-stage-2",
-        ({ body }) => forward(body),
-        { body: t.Object({ "metadata": t.Object({ "method": t.String(), "stage": t.String(), "grouper": t.String() }), "data": t.Object({ "nomor_sep": t.String(), "special_cmg": t.String() }) }) }
+        ({ body }) => {
+            const res: any = forward({
+                metadata: { "method": "grouper", "stage": "2", "grouper": "inacbg" },
+                data: { nomor_sep: body.nomor_sep, special_cmg: body.special_cmg.map((item: any) => item.code).join('#') }
+            })
+            if (res.metadata.code === 200) {
+                sql(`update idrg.grouping_inacbg set stage=2 where claim_id='${body.claim_id}'`);
+                if (res.response_inacbg.special_cmg) {
+                    const cmg = res.special_cmg_option.map((item: any) => `((select id from idrg.grouping_results where claim_id='${body.claim_id}'), '${item.cmg}', '${item.description}', ${item.tariff},'${item.type}')`).join(',');
+                    sql(`INSERT INTO idrg.grouping_inacbg_special_cmg(grouping_inacbg_id, code, description,tariff,type) values${cmg}`);
+                }
+            }
+        },
+        {
+            body: t.Object({
+                claim_id: t.Number(),
+                "nomor_sep": t.String(),
+                "special_cmg": t.Array(t.Object({
+                    code: t.String(),
+                    description: t.String(),
+                    tariff: t.Number(),
+                    type: t.String()
+                }))
+            })
+        }
     )
 
     .post(
         "/final-inacbg",
-        ({ body }) => forward(body),
-        { body: t.Object({ "metadata": t.Object({ "method": t.String() }), "data": t.Object({ "nomor_sep": t.String() }) }) }
+        ({ body }) => forward({
+            metadata: { "method": "inacbg_grouper_final" },
+            data: { nomor_sep: body.nomor_sep }
+        }),
+        { body: t.Object({ "nomor_sep": t.String() }) }
     )
 
     .post(
         "/re-edit-inacbg",
-        ({ body }) => forward(body),
-        { body: t.Object({ "metadata": t.Object({ "method": t.String() }), "data": t.Object({ "nomor_sep": t.String() }) }) }
+        ({ body }) => forward({
+            metadata: { "method": "inacbg_grouper_reedit" },
+            data: { nomor_sep: body.nomor_sep }
+        }),
+        { body: t.Object({ "nomor_sep": t.String() }) }
     )
 
     .post(
         "/claim-final",
-        ({ body }) => forward(body),
-        { body: t.Object({ "metadata": t.Object({ "method": t.String() }), "data": t.Object({ "nomor_sep": t.String(), "coder_nik": t.String() }) }) }
+        ({ body }) => forward({
+            metadata: { "method": "claim_final" },
+            data: { nomor_sep: body.nomor_sep },
+            coder_nik: '3315070211930002'
+        }),
+        { body: t.Object({ "nomor_sep": t.String() }) }
     )
 
     .post(
         "/claim-re-edit",
-        ({ body }) => forward(body),
-        { body: t.Object({ "metadata": t.Object({ "method": t.String() }), "data": t.Object({ "nomor_sep": t.String() }) }) }
+        ({ body }) => forward({
+            metadata: { "method": "reedit_claim" },
+            data: { nomor_sep: body.nomor_sep }
+        }),
+        { body: t.Object({ "nomor_sep": t.String() }) }
     )
 
     .post(
         "/claim-send",
-        ({ body }) => forward(body),
-        { body: t.Object({ "metadata": t.Object({ "method": t.String() }), "data": t.Object({ "nomor_sep": t.String() }) }) }
+        ({ body }) => forward({
+            metadata: { "method": "send_claim_individual" },
+            data: { nomor_sep: body.nomor_sep }
+        }),
+        { body: t.Object({ "nomor_sep": t.String() }) }
     )
 
     .post(
         "/get-claim-data",
-        ({ body }) => forward(body),
-        { body: t.Object({ "metadata": t.Object({ "method": t.String() }), "data": t.Object({ "nomor_sep": t.String() }) }) }
+        ({ body }) => forward({
+            metadata: { "method": "get_claim_data" },
+            data: { nomor_sep: body.nomor_sep }
+        }),
+        { body: t.Object({ "nomor_sep": t.String() }) }
     )
 
 export default post;
