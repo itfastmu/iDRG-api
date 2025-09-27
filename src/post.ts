@@ -6,12 +6,17 @@ const forward = async (body: unknown) => {
     if (!Bun.env.EKLAIM_URL) {
         throw new Error("EKLAIM_URL environment variable is not defined");
     }
-    const res = await fetch(Bun.env.EKLAIM_URL + mode, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-    });
-    return await res.json();
+    console.log("lewat sini", Bun.env.EKLAIM_URL + mode);
+    try {
+        const res = await fetch(Bun.env.EKLAIM_URL + mode, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body),
+        });
+        return await res.json();
+    } catch (error) {
+        console.log(error);
+    }
 };
 const post = new Elysia({ prefix: '/send' })
     .post("/sitb-validate", async ({ body }) => {
@@ -19,6 +24,9 @@ const post = new Elysia({ prefix: '/send' })
             metadata: { "method": "sitb_validate" },
             data: body.data
         })
+        if (res.metadata.code === 200) {
+            await sql(`INSERT INTO idrg.sitb(nomor_register_sitb,nomor_sep) VALUES('${body.data.nomor_register_sitb}', '${body.data.nomor_sep}')`);
+        }
         return res;
     }, {
         body: t.Object({ "data": t.Object({ "nomor_sep": t.String(), "nomor_register_sitb": t.String() }) })
@@ -32,8 +40,9 @@ const post = new Elysia({ prefix: '/send' })
                 },
                 data: body.data
             })
+            console.log(res);
             if (res.metadata.code === 200) {
-                const claim: any = await sql(`INSERT INTO idrg.claims(nomor_kartu,nomor_sep,nomor_rm,nama_pasien,tgl_lahir,gender,status_claim) VALUES('${body.data.nomor_kartu}', '${body.data.nomor_sep}', '${body.data.nomor_rm}', '${body.data.nama_pasien}', '${body.data.tgl_lahir}', '${body.data.gender}','new claim') RETURNING id`);
+                const claim: any = await sql(`INSERT INTO idrg.claims(nomor_kartu, nomor_sep, nomor_rm, nama_pasien, tgl_lahir, gender, status_claim) VALUES('${body.data.nomor_kartu}', '${body.data.nomor_sep}', '${body.data.nomor_rm}', '${body.data.nama_pasien}', '${body.data.tgl_lahir}', '${body.data.gender}', 'new claim') RETURNING id`);
                 return { ...res.response, claim_id: claim.id };
             } else {
                 return { error: res.metadata.message };
@@ -184,14 +193,18 @@ const post = new Elysia({ prefix: '/send' })
                 data: { "diagnosa": body.diagnosa.map((item: any) => item.code).join('#') }
             })
             if (diagnosa.metadata.code === 200) {
-                await sql(`insert into idrg.diagnosa(nomor_sep,diagnosa) values('${body.nomor_sep}','${body.diagnosa}')`);
+                await sql(`DELETE FROM idrg.diagnosa WHERE claim_id='${body.claim_id}'`);
+                const diagnosa = body.diagnosa.map((item: any) => `('${body.claim_id}', '${item.code}', '${item.display}', ${item.no}, ${item.validcode})`).join(',');
+                await sql(`insert into idrg.diagnosa(claim_id, code, display, no, validcode) values${diagnosa}`);
             }
             const procedure = await forward({
                 metadata: { "method": "idrg_procedure_set", "nomor_sep": body.nomor_sep },
                 data: { "procedure": body.procedure.map((item: any) => item.code).join('#') }
             })
             if (procedure.metadata.code === 200) {
-                await sql(`insert into idrg.procedure(nomor_sep,procedure) values('${body.nomor_sep}','${body.procedure}')`);
+                await sql(`DELETE FROM idrg.procedure WHERE nomor_sep='${body.nomor_sep}'`);
+                const procedure = body.procedure.map((item: any) => `('${body.claim_id}', '${item.code}', '${item.display}', ${item.no}, ${item.multiplicity}, ${item.validcode})`).join(',');
+                await sql(`insert into idrg.procedure(claim_id, code, display, no, multiplicity, validcode) values${procedure}`);
             }
             if (diagnosa.metadata.code === 200 && procedure.metadata.code === 200) {
                 const res = await forward({
@@ -202,7 +215,8 @@ const post = new Elysia({ prefix: '/send' })
                     },
                     data: { "nomor_sep": body.nomor_sep }
                 })
-                await sql(`INSERT INTO idrg.grouping_results(nomor_sep,hasil) values('${body.nomor_sep}','${JSON.stringify(res.response)}')`);
+                await sql(`DELETE FROM idrg.grouping_results WHERE claim_id='${body.claim_id}'`);
+                await sql(`INSERT INTO idrg.grouping_results(claim_id, mdc_number,mdc_description,drg_code,drg_description) values('${body.claim_id}', '${res.response.mdc_number}', '${res.response.mdc_description}', '${res.response.drg_code}', '${res.response.drg_description}')`);
                 return res;
             } else {
                 return { error: "Failed to set diagnosa or procedure" };
@@ -238,7 +252,7 @@ const post = new Elysia({ prefix: '/send' })
                 data: body.data
             })
             if (res.metadata.code === 200) {
-                await sql(`update idrg.claims set status_claim='Final Idrg' where id=${body.claim_id}`);
+                await sql(`update idrg.claims set status_claim = 'Final Idrg' where id = ${body.claim_id}`);
             }
             return res.response;
         },
@@ -247,14 +261,32 @@ const post = new Elysia({ prefix: '/send' })
 
     .post(
         "/re-edit-idrg",
-        ({ body }) => forward(body),
-        { body: t.Object({ "metadata": t.Object({ "method": t.String() }), "data": t.Object({ "nomor_sep": t.String() }) }) }
+        async ({ body }) => {
+            const res = await forward({
+                metadata: { "method": "idrg_grouper_reedit" },
+                data: { nomor_sep: body.nomor_sep }
+            })
+            if (res.metadata.code === 200) {
+                await sql(`update idrg.claims set status_claim = 'Re-Edit Idrg' where id = ${body.claim_id}`);
+            }
+            return res.response;
+        },
+        { body: t.Object({ claim_id: t.Number(), "nomor_sep": t.String() }) }
     )
 
     .post(
         "/idrg-to-inacbg-import",
-        ({ body }) => forward(body),
-        { body: t.Object({ "metadata": t.Object({ "method": t.String() }), "data": t.Object({ "nomor_sep": t.String() }) }) }
+        async ({ body }) => {
+            const res = await forward({
+                metadata: { "method": "idrg_to_inacbg_import" },
+                data: { nomor_sep: body.nomor_sep }
+            })
+            if (res.metadata.code === 200) {
+                await sql(`update idrg.claims set status_claim = 'Import to Inacbg' where id = ${body.claim_id}`);
+            }
+            return res.response;
+        },
+        { body: t.Object({ claim_id: t.Number(), "nomor_sep": t.String() }) }
     )
 
     // .post(
@@ -289,24 +321,36 @@ const post = new Elysia({ prefix: '/send' })
                 data: { "diagnosa": body.diagnosa.map((item: any) => item.code).join('#') }
             })
             if (diagnosa.metadata.code === 200) {
-                await sql(`insert into idrg.diagnosa_inacbg(nomor_sep,diagnosa) values('${body.nomor_sep}','${body.diagnosa}')`);
+                await sql(`DELETE FROM idrg.diagnosa_inacbg WHERE claim_id='${body.claim_id}'`);
+                const diagnosa = body.diagnosa.map((item: any) => `('${body.claim_id}', '${item.code}')`).join(',');
+                await sql(`insert into idrg.diagnosa_inacbg(claim_id, code, display, no, validcode) values${diagnosa}`);
             }
             const procedure = await forward({
                 metadata: { "method": "inacbg_procedure_set", "nomor_sep": body.nomor_sep },
                 data: { "procedure": body.procedure.map((item: any) => item.code).join('#') }
             })
             if (procedure.metadata.code === 200) {
-                await sql(`insert into idrg.procedure_inacbg(nomor_sep,procedure) values('${body.nomor_sep}','${body.procedure}')`);
+                await sql(`DELETE FROM idrg.procedure_inacbg WHERE nomor_sep='${body.nomor_sep}'`);
+                const procedure = body.procedure.map((item: any) => `('${body.claim_id}', '${item.code}')`).join(',');
+                await sql(`insert into idrg.procedure_inacbg(claim_id, code, display, no, validcode) values${procedure}`);
             }
             if (diagnosa.metadata.code === 200 && procedure.metadata.code === 200) {
                 const res = await forward({
                     metadata: {
                         "method": "grouper",
                         "stage": "1",
-                        "grouper": "idrg"
+                        "grouper": "inacbg"
                     },
                     data: { "nomor_sep": body.nomor_sep }
                 })
+                if (res.metadata.code === 200) {
+                    await sql(`DELETE FROM idrg.grouping_results WHERE claim_id='${body.claim_id}'`);
+                    const inacbgGroup: any = await sql(`INSERT INTO idrg.grouping_results(claim_id, stage,cbg_code,cbg_description,base_tariff,tariff,kelas,inacbg_version) values('${body.claim_id}',1, '${res.response_inacb.cbg.code}', '${res.response_inacb.cbg.description}', ${res.response_inacb.base_tariff}, ${res.response_inacbg.tariff}, '${res.response_inacbg.kelas}', '${res.response_inacbg.inacbg_version}' RETURNING id`);
+                    if (res.special_cmg_option) {
+                        const cmgOption = res.special_cmg_option.map((item: any) => `('${inacbgGroup.id}', '${item.cmg}', '${item.description}')`).join(',');
+                        await sql(`INSERT INTO idrg.grouping_inacbg_special_cmg_option(grouping_inacbg_id, code, description) values${cmgOption}`);
+                    }
+                }
                 return res;
             } else {
                 return { error: "Failed to set diagnosa or procedure" };
@@ -314,15 +358,14 @@ const post = new Elysia({ prefix: '/send' })
         },
         {
             body: t.Object({
+                claim_id: t.Number(),
                 "diagnosa": t.Array(t.Object({
-                    claim_id: t.Number(),
                     code: t.String(),
                     display: t.String(),
                     no: t.Number(),
                     validcode: t.Number()
                 })),
                 "procedure": t.Array(t.Object({
-                    claim_id: t.Number(),
                     code: t.String(),
                     display: t.String(),
                     no: t.Number(),
