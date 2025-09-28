@@ -111,19 +111,33 @@ const get = new Elysia({ prefix: '/grab' })
         params: t.Object({ id: t.Number() })
     })
     .get(
-        "/data/:id",
+        "/idrg/:id",
         async ({ params }) => {
-            const raw = await sql(`SELECT * FROM idrg.claims WHERE id = ?`, [params.id]);
-            const diagnosa_inacbg = await sql(`SELECT * FROM idrg.diagnosa_inacbg WHERE claim_id = ?`, [params.id]);
-            const prosedur_inacbg = await sql(`SELECT * FROM idrg.prosedures_inacbg WHERE claim_id = ?`, [params.id]);
-            const grouping_inacbg: any = await sql(`SELECT * FROM idrg.grouping_inacbg WHERE claim_id = ? RETURNING id`, [params.id]);
-            const special_cmg = await sql(`SELECT * FROM idrg.special_cmg WHERE grouping_inacbg_id = ?`, [grouping_inacbg.id]) || null;
+            const diagnosa_idrg = await sql(`SELECT * FROM idrg.diagnosa WHERE claim_id = ?`, [params.id]);
+            const prosedur_idrg = await sql(`SELECT * FROM idrg.prosedures WHERE claim_id = ?`, [params.id]);
+            const grouping_idrg = await sql(`SELECT * FROM idrg.grouping_result WHERE claim_id = ?`, [params.id]);
             return {
-                ...raw[0],
+                diagnosa_idrg,
+                prosedur_idrg,
+                grouping_idrg
+            };
+        }, {
+        params: t.Object({ id: t.Number() })
+    })
+    .get(
+        "/inacbg/:id",
+        async ({ params }) => {
+            const diagnosa_inacbg = await sql(`SELECT * FROM idrg.diagnosa_inacbg WHERE claim_id = ?`, [params.id]);
+            const prosedur_inacbg = await sql(`SELECT * FROM idrg.prosedur_inacbg WHERE claim_id = ?`, [params.id]);
+            const grouping_inacbg: any = await sql(`SELECT * FROM idrg.grouping_inacbg WHERE claim_id = ? RETURNING id`, [params.id]);
+            const special_cmg = await sql(`SELECT * FROM idrg.grouping_inacbg_special_cmg WHERE grouping_inacbg_id = ?`, [grouping_inacbg.id]) || null;
+            const special_cmg_option = await sql(`SELECT * FROM idrg.grouping_inacbg_special_cmg_option WHERE grouping_inacbg_id = ?`, [grouping_inacbg.id]) || null;
+            return {
                 diagnosa_inacbg,
                 prosedur_inacbg,
                 grouping_inacbg,
-                special_cmg
+                special_cmg,
+                special_cmg_option
             };
         }, {
         params: t.Object({ id: t.Number() })
