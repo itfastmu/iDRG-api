@@ -348,7 +348,7 @@ const post = new Elysia({ prefix: '/send' })
             })
             if (diagnosa.metadata.code === 200) {
                 await sql(`DELETE FROM idrg.diagnosa_inacbg WHERE claim_id='${body.claim_id}'`);
-                const diagnosa = body.diagnosa.map((item: any) => `('${body.claim_id}', '${item.code}')`).join(',');
+                const diagnosa = body.diagnosa.map((item: any) => `('${body.claim_id}', '${item.code}','${item.display}', ${item.no}, ${item.validcode})`).join(',');
                 await sql(`insert into idrg.diagnosa_inacbg(claim_id, code, display, no, validcode) values${diagnosa}`);
             }
             const procedure = await forward({
@@ -357,7 +357,7 @@ const post = new Elysia({ prefix: '/send' })
             })
             if (procedure.metadata.code === 200) {
                 await sql(`DELETE FROM idrg.procedures_inacbg WHERE nomor_sep='${body.nomor_sep}'`);
-                const procedure = body.procedure.map((item: any) => `('${body.claim_id}', '${item.code}')`).join(',');
+                const procedure = body.procedure.map((item: any) => `('${body.claim_id}', '${item.code}', '${item.display}', ${item.no}, ${item.validcode})`).join(',');
                 await sql(`insert into idrg.procedures_inacbg(claim_id, code, display, no, validcode) values${procedure}`);
             }
             if (diagnosa.metadata.code === 200 && procedure.metadata.code === 200) {
