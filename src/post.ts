@@ -280,7 +280,7 @@ const post = new Elysia({ prefix: '/send' })
             if (res.metadata.code === 200) {
                 await sql(`update idrg.claims set status_claim = 'Final Idrg' where id = ${body.claim_id}`);
             }
-            return res.response;
+            return res;
         },
         { body: t.Object({ "claim_id": t.Number(), "data": t.Object({ "nomor_sep": t.String() }) }) }
     )
@@ -295,7 +295,7 @@ const post = new Elysia({ prefix: '/send' })
             if (res.metadata.code === 200) {
                 await sql(`update idrg.claims set status_claim = 'Re-Edit Idrg' where id = ${body.claim_id}`);
             }
-            return res.response;
+            return res;
         },
         { body: t.Object({ claim_id: t.Number(), "nomor_sep": t.String() }) }
     )
@@ -310,7 +310,7 @@ const post = new Elysia({ prefix: '/send' })
             if (res.metadata.code === 200) {
                 await sql(`update idrg.claims set status_claim = 'Import to Inacbg' where id = ${body.claim_id}`);
             }
-            return res.response;
+            return res;
         },
         { body: t.Object({ claim_id: t.Number(), "nomor_sep": t.String() }) }
     )
