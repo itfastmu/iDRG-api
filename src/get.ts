@@ -110,5 +110,23 @@ const get = new Elysia({ prefix: '/grab' })
         }, {
         params: t.Object({ id: t.Number() })
     })
+    .get(
+        "/data/:id",
+        async ({ params }) => {
+            const raw = await sql(`SELECT * FROM idrg.claims WHERE id = ?`, [params.id]);
+            const diagnosa_inacbg = await sql(`SELECT * FROM idrg.diagnosa_inacbg WHERE claim_id = ?`, [params.id]);
+            const prosedur_inacbg = await sql(`SELECT * FROM idrg.prosedures_inacbg WHERE claim_id = ?`, [params.id]);
+            const grouping_inacbg: any = await sql(`SELECT * FROM idrg.grouping_inacbg WHERE claim_id = ? RETURNING id`, [params.id]);
+            const special_cmg = await sql(`SELECT * FROM idrg.special_cmg WHERE grouping_inacbg_id = ?`, [grouping_inacbg.id]) || null;
+            return {
+                ...raw[0],
+                diagnosa_inacbg,
+                prosedur_inacbg,
+                grouping_inacbg,
+                special_cmg
+            };
+        }, {
+        params: t.Object({ id: t.Number() })
+    })
 
 export default get;

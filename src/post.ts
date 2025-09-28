@@ -273,7 +273,7 @@ const post = new Elysia({ prefix: '/send' })
     .post(
         "/final-idrg",
         async ({ body }) => {
-            const res: any = forward({
+            const res: any = await forward({
                 metadata: { "method": "idrg_grouper_final" },
                 data: body.data
             })
@@ -356,9 +356,9 @@ const post = new Elysia({ prefix: '/send' })
                 data: { "procedure": body.procedure.map((item: any) => item.code).join('#') }
             })
             if (procedure.metadata.code === 200) {
-                await sql(`DELETE FROM idrg.procedure_inacbg WHERE nomor_sep='${body.nomor_sep}'`);
+                await sql(`DELETE FROM idrg.procedures_inacbg WHERE nomor_sep='${body.nomor_sep}'`);
                 const procedure = body.procedure.map((item: any) => `('${body.claim_id}', '${item.code}')`).join(',');
-                await sql(`insert into idrg.procedure_inacbg(claim_id, code, display, no, validcode) values${procedure}`);
+                await sql(`insert into idrg.procedures_inacbg(claim_id, code, display, no, validcode) values${procedure}`);
             }
             if (diagnosa.metadata.code === 200 && procedure.metadata.code === 200) {
                 const res = await forward({
