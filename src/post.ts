@@ -80,7 +80,7 @@ const post = new Elysia({ prefix: '/send' })
 
                     await sql(tarifSql, [claim[0].id, ...tarifValues]);
                 }
-                return res;
+                return { ...res, claim_id: claim[0].id };
             } else {
                 console.log(res)
                 return { error: res.metadata.message };
@@ -236,6 +236,15 @@ const post = new Elysia({ prefix: '/send' })
                     await sql(`DELETE FROM idrg.grouping_results WHERE claim_id='${body.claim_id}'`);
                     await sql(`INSERT INTO idrg.grouping_results(claim_id, mdc_number,mdc_description,drg_code,drg_description) values('${body.claim_id}', '${res.response_idrg.mdc_number}', '${res.response_idrg.mdc_description}', '${res.response_idrg.drg_code}', '${res.response_idrg.drg_description}')`);
                 }
+                const date = new Date();
+                const options = { year: 'numeric' as const, month: 'long' as const, day: 'numeric' as const };
+                const formattedDate = date.toLocaleDateString('id-ID', options);
+
+                // Format waktu menjadi "10:05"
+                const hours = String(date.getHours()).padStart(2, '0');
+                const minutes = String(date.getMinutes()).padStart(2, '0');
+                const formattedTime = `${hours}.${minutes}`;
+                res.response_idrg.info = `iDRG @ ${formattedDate} pukul ${formattedTime}`;
                 return res;
             } else {
                 return { error: "Failed to set diagnosa or procedure" };
