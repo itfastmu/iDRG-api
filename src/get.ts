@@ -97,7 +97,7 @@ const get = new Elysia({ prefix: '/grab' })
         async ({ params }) => {
             const raw = await sql(`SELECT * FROM idrg.claims WHERE id = ?`, [params.id]);
             const diagnosa_inacbg = await sql(`SELECT * FROM idrg.diagnosa_inacbg WHERE claim_id = ?`, [params.id]);
-            const prosedur_inacbg = await sql(`SELECT * FROM idrg.prosedur_inacbg WHERE claim_id = ?`, [params.id]);
+            const prosedur_inacbg = await sql(`SELECT * FROM idrg.procedures_inacbg WHERE claim_id = ?`, [params.id]);
             const grouping_inacbg: any = await sql(`SELECT * FROM idrg.grouping_inacbg WHERE claim_id = ? RETURNING id`, [params.id]);
             const special_cmg = await sql(`SELECT * FROM idrg.special_cmg WHERE grouping_inacbg_id = ?`, [grouping_inacbg.id]) || null;
             return {
@@ -114,8 +114,8 @@ const get = new Elysia({ prefix: '/grab' })
         "/idrg/:id",
         async ({ params }) => {
             const diagnosa_idrg = await sql(`SELECT * FROM idrg.diagnosa WHERE claim_id = ?`, [params.id]);
-            const prosedur_idrg = await sql(`SELECT * FROM idrg.prosedures WHERE claim_id = ?`, [params.id]);
-            const grouping_idrg = await sql(`SELECT * FROM idrg.grouping_result WHERE claim_id = ?`, [params.id]);
+            const prosedur_idrg = await sql(`SELECT * FROM idrg.procedures WHERE claim_id = ?`, [params.id]);
+            const grouping_idrg = await sql(`SELECT * FROM idrg.grouping_results WHERE claim_id = ?`, [params.id]);
             return {
                 diagnosa_idrg,
                 prosedur_idrg,
@@ -128,7 +128,7 @@ const get = new Elysia({ prefix: '/grab' })
         "/inacbg/:id",
         async ({ params }) => {
             const diagnosa_inacbg = await sql(`SELECT * FROM idrg.diagnosa_inacbg WHERE claim_id = ?`, [params.id]);
-            const prosedur_inacbg = await sql(`SELECT * FROM idrg.prosedur_inacbg WHERE claim_id = ?`, [params.id]);
+            const prosedur_inacbg = await sql(`SELECT * FROM idrg.procedures_inacbg WHERE claim_id = ?`, [params.id]);
             const grouping_inacbg: any = await sql(`SELECT * FROM idrg.grouping_inacbg WHERE claim_id = ? RETURNING id`, [params.id]);
             const special_cmg = await sql(`SELECT * FROM idrg.grouping_inacbg_special_cmg WHERE grouping_inacbg_id = ?`, [grouping_inacbg.id]) || null;
             const special_cmg_option = await sql(`SELECT * FROM idrg.grouping_inacbg_special_cmg_option WHERE grouping_inacbg_id = ?`, [grouping_inacbg.id]) || null;
