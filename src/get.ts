@@ -115,7 +115,20 @@ const get = new Elysia({ prefix: '/grab' })
         async ({ params }) => {
             const diagnosa_idrg = await sql(`SELECT * FROM idrg.diagnosa WHERE claim_id = ?`, [params.id]);
             const prosedur_idrg = await sql(`SELECT * FROM idrg.procedures WHERE claim_id = ?`, [params.id]);
-            const grouping_idrg = await sql(`SELECT * FROM idrg.grouping_results WHERE claim_id = ?`, [params.id]);
+            const grouping_result: any = await sql(`SELECT * FROM idrg.grouping_results WHERE claim_id = ?`, [params.id]);
+            if (grouping_result.length > 0) {
+                const date = new Date(grouping_result[0].created_at);
+                const options = { year: 'numeric' as const, month: 'long' as const, day: 'numeric' as const };
+                const formattedDate = date.toLocaleDateString('id-ID', options);
+
+                // Format waktu menjadi "10:05"
+                const hours = String(date.getHours()).padStart(2, '0');
+                const minutes = String(date.getMinutes()).padStart(2, '0');
+                const formattedTime = `${hours}.${minutes}`;
+                const grouping_idrg = { ...grouping_result, info: `iDRG @ ${formattedDate} pukul ${formattedTime}` };
+            } else {
+                const grouping_idrg = {};
+            }
             return {
                 diagnosa_idrg,
                 prosedur_idrg,
