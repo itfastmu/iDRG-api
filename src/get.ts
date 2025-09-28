@@ -98,8 +98,8 @@ const get = new Elysia({ prefix: '/grab' })
             const raw = await sql(`SELECT * FROM idrg.claims WHERE id = ?`, [params.id]);
             const diagnosa_inacbg = await sql(`SELECT * FROM idrg.diagnosa_inacbg WHERE claim_id = ?`, [params.id]);
             const prosedur_inacbg = await sql(`SELECT * FROM idrg.procedures_inacbg WHERE claim_id = ?`, [params.id]);
-            const grouping_inacbg: any = await sql(`SELECT * FROM idrg.grouping_inacbg WHERE claim_id = ? RETURNING id`, [params.id]);
-            const special_cmg = await sql(`SELECT * FROM idrg.special_cmg WHERE grouping_inacbg_id = ?`, [grouping_inacbg.id]) || null;
+            const grouping_inacbg: any = await sql(`SELECT * FROM idrg.grouping_inacbg WHERE claim_id = ?`, [params.id]);
+            const special_cmg = await sql(`SELECT * FROM idrg.grouping_inacbg_special_cmg WHERE grouping_inacbg_id = ?`, [grouping_inacbg[0].id]) || null;
             return {
                 ...raw[0],
                 diagnosa_inacbg,

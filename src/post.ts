@@ -356,7 +356,7 @@ const post = new Elysia({ prefix: '/send' })
                 data: { "procedure": body.procedure.map((item: any) => item.code).join('#') }
             })
             if (procedure.metadata.code === 200) {
-                await sql(`DELETE FROM idrg.procedures_inacbg WHERE nomor_sep='${body.nomor_sep}'`);
+                await sql(`DELETE FROM idrg.procedures_inacbg WHERE claim_id='${body.claim_id}'`);
                 const procedure = body.procedure.map((item: any) => `('${body.claim_id}', '${item.code}', '${item.display}', ${item.no}, ${item.validcode})`).join(',');
                 await sql(`insert into idrg.procedures_inacbg(claim_id, code, display, no, validcode) values${procedure}`);
             }
@@ -370,14 +370,18 @@ const post = new Elysia({ prefix: '/send' })
                     data: { "nomor_sep": body.nomor_sep }
                 })
                 if (res.metadata.code === 200) {
-                    await sql(`DELETE FROM idrg.grouping_results WHERE claim_id='${body.claim_id}'`);
-                    const inacbgGroup: any = await sql(`INSERT INTO idrg.grouping_results(claim_id, stage,cbg_code,cbg_description,base_tariff,tariff,kelas,inacbg_version) values('${body.claim_id}',1, '${res.response_inacb.cbg.code}', '${res.response_inacb.cbg.description}', ${res.response_inacb.base_tariff}, ${res.response_inacbg.tariff}, '${res.response_inacbg.kelas}', '${res.response_inacbg.inacbg_version}' RETURNING id`);
+
+                    await sql(`DELETE FROM idrg.grouping_inacbg WHERE claim_id='${body.claim_id}'`);
+                    const inacbgGroup: any = await sql(`INSERT INTO idrg.grouping_inacbg(claim_id, stage,cbg_code,cbg_description,base_tariff,tariff,kelas,inacbg_version) values('${body.claim_id}',1, '${res.response_inacbg.cbg.code}', '${res.response_inacbg.cbg.description}', ${res.response_inacbg.base_tariff}, ${res.response_inacbg.tariff}, '${res.response_inacbg.kelas}', '${res.response_inacbg.inacbg_version}') RETURNING id`);
                     if (res.special_cmg_option) {
                         const cmgOption = res.special_cmg_option.map((item: any) => `('${inacbgGroup[0].id}', '${item.cmg}', '${item.description}','${item.type}')`).join(',');
                         await sql(`INSERT INTO idrg.grouping_inacbg_special_cmg_option(grouping_inacbg_id, code, description, type) values${cmgOption}`);
                     }
                 }
-                return res;
+                return {
+                    ...res,
+                    info: `MOCHAMMAD SAIFUDDIN NOVIANTO SAPUTRA, AMD.RMIK @ ${new Date().toLocaleDateString('id-ID', { year: 'numeric', month: 'short', day: 'numeric' })} pukul ${new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }).replace(':', '.')} ** Kelas C ** Tarif: TARIF RS KELAS C SWASTA`
+                };
             } else {
                 return { error: "Failed to set diagnosa or procedure" };
             }
@@ -404,16 +408,18 @@ const post = new Elysia({ prefix: '/send' })
 
     .post(
         "/grouping-inacbg-stage-2",
-        ({ body }) => {
-            const res: any = forward({
+        async ({ body }) => {
+            const res: any = await forward({
                 metadata: { "method": "grouper", "stage": "2", "grouper": "inacbg" },
                 data: { nomor_sep: body.nomor_sep, special_cmg: body.special_cmg.map((item: any) => item.code).join('#') }
             })
+            console.log(res);
             if (res.metadata.code === 200) {
                 sql(`update idrg.grouping_inacbg set stage=2 where claim_id='${body.claim_id}'`);
                 if (res.response_inacbg.special_cmg) {
-                    const cmg = res.special_cmg_option.map((item: any) => `((select id from idrg.grouping_results where claim_id='${body.claim_id}'), '${item.cmg}', '${item.description}', ${item.tariff},'${item.type}')`).join(',');
+                    const cmg = res.response_inacbg.special_cmg.map((item: any) => `((select id from idrg.grouping_inacbg where claim_id='${body.claim_id}'), '${item.code}', '${item.description}', ${item.tariff},'${item.type}')`).join(',');
                     sql(`INSERT INTO idrg.grouping_inacbg_special_cmg(grouping_inacbg_id, code, description,tariff,type) values${cmg}`);
+                    return res;
                 }
             }
         },
@@ -424,7 +430,6 @@ const post = new Elysia({ prefix: '/send' })
                 "special_cmg": t.Array(t.Object({
                     code: t.String(),
                     description: t.String(),
-                    tariff: t.Number(),
                     type: t.String()
                 }))
             })
