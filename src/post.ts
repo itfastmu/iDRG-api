@@ -55,6 +55,7 @@ const post = new Elysia({ prefix: '/send' })
     .post(
         "/set-claim-data",
         async ({ body }) => {
+            body.data.kode_tarif = 'CS'
             const res = await forward({
                 metadata: {
                     "method": "set_claim_data",
@@ -218,9 +219,9 @@ const post = new Elysia({ prefix: '/send' })
                 data: { "procedure": body.procedure.map((item: any) => item.code).join('#') }
             })
             if (procedure.metadata.code === 200) {
-                await sql(`DELETE FROM idrg.procedure WHERE nomor_sep='${body.nomor_sep}'`);
+                await sql(`DELETE FROM idrg.procedures WHERE claim_id='${body.claim_id}'`);
                 const procedure = body.procedure.map((item: any) => `('${body.claim_id}', '${item.code}', '${item.display}', ${item.no}, ${item.multiplicity}, ${item.validcode})`).join(',');
-                await sql(`insert into idrg.procedure(claim_id, code, display, no, multiplicity, validcode) values${procedure}`);
+                await sql(`insert into idrg.procedures(claim_id, code, display, no, multiplicity, validcode) values${procedure}`);
             }
             if (diagnosa.metadata.code === 200 && procedure.metadata.code === 200) {
                 const res = await forward({
@@ -231,8 +232,10 @@ const post = new Elysia({ prefix: '/send' })
                     },
                     data: { "nomor_sep": body.nomor_sep }
                 })
-                await sql(`DELETE FROM idrg.grouping_results WHERE claim_id='${body.claim_id}'`);
-                await sql(`INSERT INTO idrg.grouping_results(claim_id, mdc_number,mdc_description,drg_code,drg_description) values('${body.claim_id}', '${res.response.mdc_number}', '${res.response.mdc_description}', '${res.response.drg_code}', '${res.response.drg_description}')`);
+                if (res.metadata.code === 200) {
+                    await sql(`DELETE FROM idrg.grouping_results WHERE claim_id='${body.claim_id}'`);
+                    await sql(`INSERT INTO idrg.grouping_results(claim_id, mdc_number,mdc_description,drg_code,drg_description) values('${body.claim_id}', '${res.response_idrg.mdc_number}', '${res.response_idrg.mdc_description}', '${res.response_idrg.drg_code}', '${res.response_idrg.drg_description}')`);
+                }
                 return res;
             } else {
                 return { error: "Failed to set diagnosa or procedure" };
@@ -242,13 +245,11 @@ const post = new Elysia({ prefix: '/send' })
             body: t.Object({
                 claim_id: t.Number(),
                 "diagnosa": t.Array(t.Object({
-                    claim_id: t.Number(),
                     code: t.String(),
                     display: t.String(),
                     no: t.Number(),
                     validcode: t.Number()
                 })), "procedure": t.Array(t.Object({
-                    claim_id: t.Number(),
                     code: t.String(),
                     display: t.String(),
                     no: t.Number(),
