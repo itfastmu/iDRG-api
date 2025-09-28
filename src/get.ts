@@ -127,7 +127,7 @@ const get = new Elysia({ prefix: '/grab' })
                 const hours = String(date.getHours()).padStart(2, '0');
                 const minutes = String(date.getMinutes()).padStart(2, '0');
                 const formattedTime = `${hours}.${minutes}`;
-                grouping_idrg = { ...grouping_result, info: `iDRG @ ${formattedDate} pukul ${formattedTime}` };
+                grouping_idrg = { ...grouping_result[0], info: `iDRG @ ${formattedDate} pukul ${formattedTime}` };
             }
             return {
                 diagnosa_idrg,
