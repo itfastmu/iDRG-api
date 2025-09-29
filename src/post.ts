@@ -6,7 +6,6 @@ const forward = async (body: unknown) => {
     if (!Bun.env.EKLAIM_URL) {
         throw new Error("EKLAIM_URL environment variable is not defined");
     }
-    console.log("lewat sini", Bun.env.EKLAIM_URL + mode);
     try {
         const res = await fetch(Bun.env.EKLAIM_URL + mode, {
             method: "POST",
@@ -63,14 +62,14 @@ const post = new Elysia({ prefix: '/send' })
                 },
                 data: { ...body.data, coder_nik: '3315070211930002' }
             })
+            const { tarif_rs, ...claimData } = body.data;
+            const keys = Object.keys(claimData);
+            const values = Object.values(claimData);
+            const placeholders = keys.map(() => "?").join(",");
             if (res.metadata.code === 200) {
-                const { tarif_rs, ...claimData } = body.data;
                 // ambil key untuk tabel claims
-                const keys = Object.keys(claimData);
-                const values = Object.values(claimData);
-                const placeholders = keys.map(() => "?").join(",");
                 const claim: any = await sql(`INSERT INTO idrg.claims(${keys.join(",")}) VALUES(${placeholders}) RETURNING id`, values);
-                console.log(claim);
+                // console.log(claim);
                 if (tarif_rs) {
                     const tarifKeys = Object.keys(tarif_rs);
                     const tarifValues = Object.values(tarif_rs);
@@ -83,7 +82,10 @@ const post = new Elysia({ prefix: '/send' })
                 return { ...res, claim_id: claim[0].id };
             } else {
                 console.log(res)
-                return { error: res.metadata.message };
+                if (res.metadata.error_no === 'E2009') {
+                    await sql(`INSERT INTO idrg.claims(${keys.join(",")},status_claim) VALUES(${placeholders},?) RETURNING id`, [...values, 7]);
+                }
+                return res
             }
 
         },
@@ -283,7 +285,7 @@ const post = new Elysia({ prefix: '/send' })
                 data: body.data
             })
             if (res.metadata.code === 200) {
-                await sql(`update idrg.claims set status_claim = 'Final Idrg' where id = ${body.claim_id}`);
+                await sql(`update idrg.claims set status_claim = 3 where id = ${body.claim_id}`);
             }
             return res;
         },
@@ -298,7 +300,7 @@ const post = new Elysia({ prefix: '/send' })
                 data: { nomor_sep: body.nomor_sep }
             })
             if (res.metadata.code === 200) {
-                await sql(`update idrg.claims set status_claim = 'Re-Edit Idrg' where id = ${body.claim_id}`);
+                await sql(`update idrg.claims set status_claim = 2 where id = ${body.claim_id}`);
             }
             return res;
         },
