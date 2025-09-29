@@ -205,49 +205,54 @@ const post = new Elysia({ prefix: '/send' })
     .post(
         "/grouping-idrg",
         async ({ body }) => {
-            const diagnosa = await forward({
-                metadata: { "method": "idrg_diagnosa_set", "nomor_sep": body.nomor_sep },
-                data: { "diagnosa": body.diagnosa.map((item: any) => item.code).join('#') }
-            })
-            if (diagnosa.metadata.code === 200) {
-                await sql(`DELETE FROM idrg.diagnosa WHERE claim_id='${body.claim_id}'`);
-                const diagnosa = body.diagnosa.map((item: any) => `('${body.claim_id}', '${item.code}', '${item.display}', ${item.no}, ${item.validcode})`).join(',');
-                await sql(`insert into idrg.diagnosa(claim_id, code, display, no, validcode) values${diagnosa}`);
-            }
-            const procedure = await forward({
-                metadata: { "method": "idrg_procedure_set", "nomor_sep": body.nomor_sep },
-                data: { "procedure": body.procedure.map((item: any) => item.code).join('#') }
-            })
-            if (procedure.metadata.code === 200) {
-                await sql(`DELETE FROM idrg.procedures WHERE claim_id='${body.claim_id}'`);
-                const procedure = body.procedure.map((item: any) => `('${body.claim_id}', '${item.code}', '${item.display}', ${item.no}, ${item.multiplicity}, ${item.validcode})`).join(',');
-                await sql(`insert into idrg.procedures(claim_id, code, display, no, multiplicity, validcode) values${procedure}`);
-            }
-            if (diagnosa.metadata.code === 200 && procedure.metadata.code === 200) {
-                const res = await forward({
-                    metadata: {
-                        "method": "grouper",
-                        "stage": "1",
-                        "grouper": "idrg"
-                    },
-                    data: { "nomor_sep": body.nomor_sep }
-                })
-                if (res.metadata.code === 200) {
-                    await sql(`DELETE FROM idrg.grouping_results WHERE claim_id='${body.claim_id}'`);
-                    await sql(`INSERT INTO idrg.grouping_results(claim_id, mdc_number,mdc_description,drg_code,drg_description) values('${body.claim_id}', '${res.response_idrg.mdc_number}', '${res.response_idrg.mdc_description}', '${res.response_idrg.drg_code}', '${res.response_idrg.drg_description}')`);
-                }
-                const date = new Date();
-                const options = { year: 'numeric' as const, month: 'long' as const, day: 'numeric' as const };
-                const formattedDate = date.toLocaleDateString('id-ID', options);
+            try {
 
-                // Format waktu menjadi "10:05"
-                const hours = String(date.getHours()).padStart(2, '0');
-                const minutes = String(date.getMinutes()).padStart(2, '0');
-                const formattedTime = `${hours}.${minutes}`;
-                res.response_idrg.info = `iDRG @ ${formattedDate} pukul ${formattedTime}`;
-                return res;
-            } else {
-                return { error: "Failed to set diagnosa or procedure" };
+                const diagnosa = await forward({
+                    metadata: { "method": "idrg_diagnosa_set", "nomor_sep": body.nomor_sep },
+                    data: { "diagnosa": body.diagnosa.map((item: any) => item.code).join('#') }
+                })
+                if (diagnosa.metadata.code === 200) {
+                    await sql(`DELETE FROM idrg.diagnosa WHERE claim_id='${body.claim_id}'`);
+                    const diagnosa = body.diagnosa.map((item: any) => `('${body.claim_id}', '${item.code}', '${item.display}', ${item.no}, ${item.validcode})`).join(',');
+                    await sql(`insert into idrg.diagnosa(claim_id, code, display, no, validcode) values${diagnosa}`);
+                }
+                const procedure = await forward({
+                    metadata: { "method": "idrg_procedure_set", "nomor_sep": body.nomor_sep },
+                    data: { "procedure": body.procedure.map((item: any) => item.code).join('#') }
+                })
+                if (procedure.metadata.code === 200) {
+                    await sql(`DELETE FROM idrg.procedures WHERE claim_id='${body.claim_id}'`);
+                    const procedure = body.procedure.map((item: any) => `('${body.claim_id}', '${item.code}', '${item.display}', ${item.no}, ${item.multiplicity}, ${item.validcode})`).join(',');
+                    await sql(`insert into idrg.procedures(claim_id, code, display, no, multiplicity, validcode) values${procedure}`);
+                }
+                if (diagnosa.metadata.code === 200 && procedure.metadata.code === 200) {
+                    const res = await forward({
+                        metadata: {
+                            "method": "grouper",
+                            "stage": "1",
+                            "grouper": "idrg"
+                        },
+                        data: { "nomor_sep": body.nomor_sep }
+                    })
+                    if (res.metadata.code === 200) {
+                        await sql(`DELETE FROM idrg.grouping_results WHERE claim_id='${body.claim_id}'`);
+                        await sql(`INSERT INTO idrg.grouping_results(claim_id, mdc_number,mdc_description,drg_code,drg_description) values('${body.claim_id}', '${res.response_idrg.mdc_number}', '${res.response_idrg.mdc_description}', '${res.response_idrg.drg_code}', '${res.response_idrg.drg_description}')`);
+                        const date = new Date();
+                        const options = { year: 'numeric' as const, month: 'long' as const, day: 'numeric' as const };
+                        const formattedDate = date.toLocaleDateString('id-ID', options);
+
+                        // Format waktu menjadi "10:05"
+                        const hours = String(date.getHours()).padStart(2, '0');
+                        const minutes = String(date.getMinutes()).padStart(2, '0');
+                        const formattedTime = `${hours}.${minutes}`;
+                        res.response_idrg.info = `iDRG @ ${formattedDate} pukul ${formattedTime}`;
+                    }
+                    return res;
+                } else {
+                    return { error: "Failed to set diagnosa or procedure" };
+                }
+            } catch (error) {
+                console.log(error)
             }
         },
         {
