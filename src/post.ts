@@ -314,9 +314,9 @@ const post = new Elysia({ prefix: '/send' })
                 metadata: { "method": "idrg_to_inacbg_import" },
                 data: { nomor_sep: body.nomor_sep }
             })
-            if (res.metadata.code === 200) {
-                await sql(`update idrg.claims set status_claim = 'Import to Inacbg' where id = ${body.claim_id}`);
-            }
+            // if (res.metadata.code === 200) {
+            //     await sql(`update idrg.claims set status_claim = 'Import to Inacbg' where id = ${body.claim_id}`);
+            // }
             return res;
         },
         { body: t.Object({ claim_id: t.Number(), "nomor_sep": t.String() }) }
