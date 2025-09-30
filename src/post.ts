@@ -251,7 +251,7 @@ const post = new Elysia({ prefix: '/send' })
                     }
                     return res;
                 } else {
-                    return { error: "Failed to set diagnosa or procedure" };
+                    return { diagnosa, procedure };
                 }
             } catch (error) {
                 console.log(error)
