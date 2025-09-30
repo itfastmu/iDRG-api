@@ -153,11 +153,12 @@ const get = new Elysia({ prefix: '/grab' })
 
                 }
                 item.special_cmg = special_cmg
+                return item
             })
             return {
                 diagnosa_inacbg,
                 prosedur_inacbg,
-                grouping_inacbg: grouping,
+                grouping_inacbg: grouping[0],
                 special_cmg_option
             };
         }, {

@@ -6,6 +6,7 @@ const forward = async (body: unknown) => {
     if (!Bun.env.EKLAIM_URL) {
         throw new Error("EKLAIM_URL environment variable is not defined");
     }
+    console.log(body)
     try {
         const res = await fetch(Bun.env.EKLAIM_URL + mode, {
             method: "POST",
@@ -445,48 +446,78 @@ const post = new Elysia({ prefix: '/send' })
 
     .post(
         "/final-inacbg",
-        ({ body }) => forward({
-            metadata: { "method": "inacbg_grouper_final" },
-            data: { nomor_sep: body.nomor_sep }
-        }),
-        { body: t.Object({ "nomor_sep": t.String() }) }
+        async ({ body }) => {
+            const res = await forward({
+                metadata: { "method": "inacbg_grouper_final" },
+                data: { nomor_sep: body.nomor_sep }
+            })
+            if (res.metadata.code === 200) {
+                await sql(`update idrg.claims set status_claim = 5 where id = ${body.claim_id}`)
+            }
+            return res;
+        },
+        { body: t.Object({ claim_id: t.Number(), "nomor_sep": t.String() }) }
     )
 
     .post(
         "/re-edit-inacbg",
-        ({ body }) => forward({
-            metadata: { "method": "inacbg_grouper_reedit" },
-            data: { nomor_sep: body.nomor_sep }
-        }),
-        { body: t.Object({ "nomor_sep": t.String() }) }
+        async ({ body }) => {
+            const res = await forward({
+                metadata: { "method": "inacbg_grouper_reedit" },
+                data: { nomor_sep: body.nomor_sep }
+            })
+            if (res.metadata.code === 200) {
+                await sql(`update idrg.claims set status_claim = 4 where id = ${body.claim_id}`)
+            }
+            return res
+        },
+        { body: t.Object({ claim_id: t.Number(), "nomor_sep": t.String() }) }
     )
 
     .post(
         "/claim-final",
-        ({ body }) => forward({
-            metadata: { "method": "claim_final" },
-            data: { nomor_sep: body.nomor_sep },
-            coder_nik: "3315070211930002"
-        }),
-        { body: t.Object({ "nomor_sep": t.String() }) }
+        async ({ body }) => {
+            const res = await forward({
+                metadata: { "method": "claim_final" },
+                data: { nomor_sep: body.nomor_sep, coder_nik: "3315070211930002" },
+            })
+            console.log(res)
+            if (res.metadata.code === 200) {
+                await sql(`update idrg.claims set status_claim = 6 where id = ${body.claim_id}`)
+            }
+            return res;
+        },
+        { body: t.Object({ claim_id: t.Number(), "nomor_sep": t.String() }) }
     )
 
     .post(
         "/claim-re-edit",
-        ({ body }) => forward({
-            metadata: { "method": "reedit_claim" },
-            data: { nomor_sep: body.nomor_sep }
-        }),
-        { body: t.Object({ "nomor_sep": t.String() }) }
+        async ({ body }) => {
+            const res = await forward({
+                metadata: { "method": "reedit_claim" },
+                data: { nomor_sep: body.nomor_sep }
+            })
+            if (res.metadata.code === 200) {
+                await sql(`update idrg.claims set status_claim = 5 where id = ${body.claim_id}`)
+            }
+            return res
+        },
+        { body: t.Object({ claim_id: t.Number(), "nomor_sep": t.String() }) }
     )
 
     .post(
         "/claim-send",
-        ({ body }) => forward({
-            metadata: { "method": "send_claim_individual" },
-            data: { nomor_sep: body.nomor_sep }
-        }),
-        { body: t.Object({ "nomor_sep": t.String() }) }
+        async ({ body }) => {
+            const res = await forward({
+                metadata: { "method": "send_claim_individual" },
+                data: { nomor_sep: body.nomor_sep }
+            })
+            if (res.metadata.code === 200) {
+                await sql(`update idrg.claims set status_claim = 4 where id = ${body.claim_id}`)
+            }
+            return res;
+        },
+        { body: t.Object({ claim_id: t.Number(), "nomor_sep": t.String() }) }
     )
 
     .post(
