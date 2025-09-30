@@ -467,7 +467,7 @@ const post = new Elysia({ prefix: '/send' })
                 data: { nomor_sep: body.nomor_sep }
             })
             if (res.metadata.code === 200) {
-                await sql(`update idrg.claims set status_claim = 4 where id = ${body.claim_id}`)
+                await sql(`update idrg.claims set status_claim = 3 where id = ${body.claim_id}`)
             }
             return res
         },
