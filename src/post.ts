@@ -447,7 +447,7 @@ const post = new Elysia({ prefix: '/send' })
         "/final-inacbg",
         ({ body }) => forward({
             metadata: { "method": "inacbg_grouper_final" },
-            data: { nomor_sep: body.nomor_sep }
+            data: { nomor_sep: body.nomor_sep, coder_nik: '3315070211930002' }
         }),
         { body: t.Object({ "nomor_sep": t.String() }) }
     )
