@@ -466,7 +466,7 @@ const post = new Elysia({ prefix: '/send' })
         ({ body }) => forward({
             metadata: { "method": "claim_final" },
             data: { nomor_sep: body.nomor_sep },
-            coder_nik: '3315070211930002'
+            coder_nik: "3315070211930002"
         }),
         { body: t.Object({ "nomor_sep": t.String() }) }
     )
