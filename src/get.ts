@@ -142,14 +142,22 @@ const get = new Elysia({ prefix: '/grab' })
         async ({ params }) => {
             const diagnosa_inacbg = await sql(`SELECT * FROM idrg.diagnosa_inacbg WHERE claim_id = ?`, [params.id]);
             const prosedur_inacbg = await sql(`SELECT * FROM idrg.procedures_inacbg WHERE claim_id = ?`, [params.id]);
-            const grouping_inacbg: any = await sql(`SELECT * FROM idrg.grouping_inacbg WHERE claim_id = ? RETURNING id`, [params.id]);
-            const special_cmg = await sql(`SELECT * FROM idrg.grouping_inacbg_special_cmg WHERE grouping_inacbg_id = ?`, [grouping_inacbg.id]) || null;
-            const special_cmg_option = await sql(`SELECT * FROM idrg.grouping_inacbg_special_cmg_option WHERE grouping_inacbg_id = ?`, [grouping_inacbg.id]) || null;
+            const grouping_inacbg: any = await sql(`SELECT * FROM idrg.grouping_inacbg WHERE claim_id = ?`, [params.id]);
+            const special_cmg = await sql(`SELECT * FROM idrg.grouping_inacbg_special_cmg WHERE grouping_inacbg_id = ? GROUP BY code`, [grouping_inacbg[0].id]) || null;
+            const special_cmg_option = await sql(`SELECT * FROM idrg.grouping_inacbg_special_cmg_option WHERE grouping_inacbg_id = ?`, [grouping_inacbg[0].id]) || null;
+            const grouping = grouping_inacbg.map(item => {
+                item.info = `MOCHAMMAD SAIFUDDIN NOVIANTO SAPUTRA, AMD.RMIK @${new Date(item.created_at).toLocaleDateString('id-ID', { year: 'numeric', month: 'short', day: 'numeric' })} pukul ${new Date(item.created_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }).replace(':', '.')} ** Kelas C ** Tarif: TARIF RS KELAS C SWASTA`
+                item.cbg = {
+                    code: item.cbg_code,
+                    description: item.cbg_description,
+
+                }
+                item.special_cmg = special_cmg
+            })
             return {
                 diagnosa_inacbg,
                 prosedur_inacbg,
-                grouping_inacbg,
-                special_cmg,
+                grouping_inacbg: grouping,
                 special_cmg_option
             };
         }, {

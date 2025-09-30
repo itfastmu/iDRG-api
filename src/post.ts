@@ -381,7 +381,7 @@ const post = new Elysia({ prefix: '/send' })
                     await sql(`DELETE FROM idrg.grouping_inacbg WHERE claim_id='${body.claim_id}'`);
                     const inacbgGroup: any = await sql(`INSERT INTO idrg.grouping_inacbg(claim_id, stage,cbg_code,cbg_description,base_tariff,tariff,kelas,inacbg_version) values('${body.claim_id}',1, '${res.response_inacbg.cbg.code}', '${res.response_inacbg.cbg.description}', ${res.response_inacbg.base_tariff}, ${res.response_inacbg.tariff}, '${res.response_inacbg.kelas}', '${res.response_inacbg.inacbg_version}') RETURNING id`);
                     if (res.special_cmg_option) {
-                        const cmgOption = res.special_cmg_option.map((item: any) => `('${inacbgGroup[0].id}', '${item.cmg}', '${item.description}','${item.type}')`).join(',');
+                        const cmgOption = res.special_cmg_option.map((item: any) => `('${inacbgGroup[0].id}', '${item.code}', '${item.description}','${item.type}')`).join(',');
                         await sql(`INSERT INTO idrg.grouping_inacbg_special_cmg_option(grouping_inacbg_id, code, description, type) values${cmgOption}`);
                     }
                 }
