@@ -55,7 +55,7 @@ const post = new Elysia({ prefix: '/send' })
     .post(
         "/set-claim-data",
         async ({ body }) => {
-            body.data.kode_tarif = 'CS'
+            // body.data.kode_tarif = 'CS'
             const res = await forward({
                 metadata: {
                     "method": "set_claim_data",
