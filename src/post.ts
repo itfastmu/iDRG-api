@@ -6,7 +6,6 @@ const forward = async (body: unknown) => {
     if (!Bun.env.EKLAIM_URL) {
         throw new Error("EKLAIM_URL environment variable is not defined");
     }
-    console.log(body)
     try {
         const res = await fetch(Bun.env.EKLAIM_URL + mode, {
             method: "POST",
@@ -69,7 +68,7 @@ const post = new Elysia({ prefix: '/send' })
             const placeholders = keys.map(() => "?").join(",");
             if (res.metadata.code === 200) {
                 // ambil key untuk tabel claims
-                const claim: any = await sql(`INSERT INTO idrg.claims(${keys.join(",")}) VALUES(${placeholders}) RETURNING id`, values);
+                const claim: any = await sql(`INSERT INTO idrg.claims(${keys.join(",")},patient_id,admission_id) VALUES(${placeholders},${res.response.patient_id},${res.response.admission_id}) RETURNING id`, values);
                 // console.log(claim);
                 if (tarif_rs) {
                     const tarifKeys = Object.keys(tarif_rs);
@@ -520,13 +519,13 @@ const post = new Elysia({ prefix: '/send' })
         { body: t.Object({ claim_id: t.Number(), "nomor_sep": t.String() }) }
     )
 
-    .post(
-        "/get-claim-data",
-        ({ body }) => forward({
+    .get(
+        "/get-claim-data/:nomor_sep",
+        ({ params }) => forward({
             metadata: { "method": "get_claim_data" },
-            data: { nomor_sep: body.nomor_sep }
+            data: { nomor_sep: params.nomor_sep }
         }),
-        { body: t.Object({ "nomor_sep": t.String() }) }
+        { params: t.Object({ "nomor_sep": t.String() }) }
     )
 
 export default post;

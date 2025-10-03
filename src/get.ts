@@ -1,5 +1,8 @@
 import Elysia, { t } from "elysia";
 import { sql } from "./connection";
+import { inacbg_decrypt, inacbg_encrypt } from "./encryption";
+
+const mode = Bun.env.MODE === "debug" ? "?mode=debug" : "";
 
 const get = new Elysia({ prefix: '/grab' })
     .get(
@@ -145,7 +148,7 @@ const get = new Elysia({ prefix: '/grab' })
             const grouping_inacbg: any = await sql(`SELECT * FROM idrg.grouping_inacbg WHERE claim_id = ?`, [params.id]);
             const special_cmg = await sql(`SELECT * FROM idrg.grouping_inacbg_special_cmg WHERE grouping_inacbg_id = ? GROUP BY code`, [grouping_inacbg[0].id]) || null;
             const special_cmg_option = await sql(`SELECT * FROM idrg.grouping_inacbg_special_cmg_option WHERE grouping_inacbg_id = ?`, [grouping_inacbg[0].id]) || null;
-            const grouping = grouping_inacbg.map(item => {
+            const grouping = grouping_inacbg.map((item: any) => {
                 item.info = `MOCHAMMAD SAIFUDDIN NOVIANTO SAPUTRA, AMD.RMIK @${new Date(item.created_at).toLocaleDateString('id-ID', { year: 'numeric', month: 'short', day: 'numeric' })} pukul ${new Date(item.created_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }).replace(':', '.')} ** Kelas C ** Tarif: TARIF RS KELAS C SWASTA`
                 item.cbg = {
                     code: item.cbg_code,
@@ -163,6 +166,53 @@ const get = new Elysia({ prefix: '/grab' })
             };
         }, {
         params: t.Object({ id: t.Number() })
+    })
+    .get("/berkas/:nomor_sep", async ({ params, status }) => {
+        const claim: any = await sql(`SELECT patient_id,admission_id FROM idrg.claims WHERE nomor_sep = ?`, [params.nomor_sep]);
+        // console.log(claim)
+        if (claim.length === 0 || claim[0].patient_id === null) {
+            if (!Bun.env.EKLAIM_URL) {
+                throw new Error("EKLAIM_URL environment variable is not defined");
+            }
+            let body: string = JSON.stringify({
+                metadata: { "method": "get_claim_data" },
+                data: { nomor_sep: params.nomor_sep }
+            })
+            let header: any = { "Content-Type": "application/json" }
+            if (Bun.env.MODE !== "debug") {
+                body = inacbg_encrypt(body);
+                header = { "Content-Type": "application/x-www-form-urlencoded" }
+            }
+            const raw: any = await fetch(Bun.env.EKLAIM_URL + mode, {
+                method: "POST",
+                headers: header,
+                body: body,
+            });
+            try {
+                let res: any
+                if (Bun.env.MODE !== "debug") {
+                    const text = await raw.text();
+                    const m = text.match(/----BEGIN ENCRYPTED DATA----\s*([\s\S]*?)\s*----END ENCRYPTED DATA----/);
+                    res = m ? m[1] : null;
+                    res = inacbg_decrypt(res);
+                    res = JSON.parse(res)
+                } else {
+                    res = raw.json();
+                }
+                if (res.metadata.code !== 200) {
+                    status(400);
+                    return { message: "Belum ada data klaim" }
+                } else {
+                    return { url: `${Bun.env.BERKAS_URL}?pid=${res.response.data.patient_id}&adm=${res.response.data.admission_id}` }
+                }
+            } catch (error) {
+                console.log(error);
+            }
+        } else {
+            return { url: `${Bun.env.BERKAS_URL}?pid=${claim[0].patient_id}&adm=${claim[0].admission_id}` }
+        }
+    }, {
+        params: t.Object({ nomor_sep: t.String() })
     })
 
 export default get;

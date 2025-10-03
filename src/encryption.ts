@@ -27,7 +27,6 @@ export function inacbg_encrypt(data: any) {
     // Combine signature + iv + encrypted, then base64
     const combined = Buffer.concat([signature, iv, encrypted]);
     const encoded = combined.toString("base64");
-
     return encoded;
 }
 
@@ -38,7 +37,6 @@ export function inacbg_decrypt(encoded: any) {
     if (key.length !== 32) {
         throw new Error("Needs a 256-bit key!");
     }
-
     const decoded = Buffer.from(encoded, "base64");
 
     const signature = decoded.subarray(0, 10);
