@@ -5,22 +5,20 @@ import { sql } from "./connection";
 
 import type { User } from './types';
 // 🔹 Token aktif sementara (token -> user)
-const activeTokens = new Map<string, any>();
+const activeTokens = new Map<string, User>();
 
 // ✅ Middleware autentikasi global reusable
-export const authMiddleware = () =>
-    new Elysia().derive(async ({ request, store }: { request: Request, store: { user?: User } }) => {
+export const authMiddleware = new Elysia()
+    .derive({ as: 'scoped' }, async ({ request }: { request: Request }) => {
         const authHeader = request.headers.get("authorization");
         if (!authHeader || !authHeader.startsWith("Bearer "))
             throw new Response("Unauthorized", { status: 401 });
-
         const token = authHeader.split(" ")[1];
         const user = activeTokens.get(token);
         if (!user)
             throw new Response("Invalid or expired token", { status: 401 });
-        store.user = user;
         // inject user (nik, username, nama, level)
-        return { user };
+        return { user: user };
     });
 
 // ✅ Plugin untuk login
@@ -32,13 +30,11 @@ export const authPlugin = () =>
                 "SELECT id, username, password, nama, nik, level FROM idrg.users WHERE username = ?",
                 [body.username]
             );
-            console.log(rows)
             if (!rows.length)
                 return new Response("User not found", { status: 401 });
 
             const user: User = rows[0];
-            const valid = await bcrypt.compare(body.password, user?.password);
-            console.log("hasil", valid)
+            const valid = await bcrypt.compare(body.password, String(user?.password));
             if (!valid)
                 return new Response("Invalid password", { status: 401 });
 
@@ -75,7 +71,7 @@ export const authPlugin = () =>
 
 // ✅ Plugin untuk register (khusus admin)
 export const registerPlugin = () =>
-    new Elysia().use(authMiddleware()).post(
+    new Elysia().use(authMiddleware).post(
         "/register",
         async ({ body, user }: { body: any; user: User }) => {
             // hanya admin yang boleh menambah user baru

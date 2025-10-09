@@ -1,10 +1,13 @@
 import Elysia, { t } from "elysia";
 import { sql } from "./connection";
 import { inacbg_decrypt, inacbg_encrypt } from "./encryption";
+import { authMiddleware } from "./auth";
+import { forward } from "./function";
 
 const mode = Bun.env.MODE === "debug" ? "?mode=debug" : "";
 
 const get = new Elysia({ prefix: '/grab' })
+    .use(authMiddleware)
     .get(
         "/list/:type?",
         async ({ params, query }) => {
@@ -29,7 +32,7 @@ const get = new Elysia({ prefix: '/grab' })
         async ({ params }) => {
             // const tanggal = query.mulai ? query.sampai ? `AND reg_periksa.tgl_registrasi BETWEEN '${query.mulai}' AND '${query.sampai}'` : `AND reg_periksa.tgl_registrasi >= '${query.mulai}'` : `AND YEAR(reg_periksa.tgl_registrasi) = YEAR(CURDATE()) AND MONTH(reg_periksa.tgl_registrasi) = MONTH(CURDATE())`;
 
-            const fields = `r.no_rawat, r.no_rkm_medis, r.kd_poli, r.tgl_registrasi, case when status_lanjut = 'Ralan' then 'Rawat Jalan' else 'Rawat Inap' end as status, bs.no_sep, bs.no_kartu, bs.klsrawat, bs.klsnaik, p.nm_pasien, p.tgl_lahir, p.jk, CASE WHEN n.bb IS NULL THEN '-' ELSE n.bb END AS berat, CASE WHEN tb.kesimpulan_skrining = 'Terduga TBC' THEN 1 ELSE 0 END AS tb, k.stts_pulang, d.nm_dokter as dokter,cl.id as claim_id, cl.status_claim, 
+            const fields = `r.no_rawat, r.no_rkm_medis, r.kd_poli, DATE_FORMAT(r.tgl_registrasi, '%Y-%m-%d %H:%i:%s') AS tgl_registrasi, case when status_lanjut = 'Ralan' then 'Rawat Jalan' else 'Rawat Inap' end as status, bs.no_sep, bs.no_kartu, bs.klsrawat, bs.klsnaik, p.nm_pasien, p.tgl_lahir, p.jk, CASE WHEN n.bb IS NULL THEN '-' ELSE n.bb END AS berat, CASE WHEN tb.kesimpulan_skrining = 'Terduga TBC' THEN 1 ELSE 0 END AS tb, k.stts_pulang, d.nm_dokter as dokter,cl.id as claim_id, cl.status_claim, 
             CASE
                 WHEN r.kd_poli = 'IGDK' THEN pi.td
                 ELSE pr.td
@@ -83,7 +86,6 @@ const get = new Elysia({ prefix: '/grab' })
             const table = params.type === 'idrg' ? 'idrg.icd_codes' : 'idrg.icd_codes_inacbg';
             const codeField = params.code === '9' ? `system LIKE 'ICD_9%'` : `system LIKE 'ICD_10%'`;
             const keyword = query.keyword ? `AND (code LIKE '${query.keyword.toUpperCase()}%' OR code2 LIKE '${query.keyword.toUpperCase()}%' OR description LIKE '%${query.keyword}%')` : '';
-            console.log(`SELECT * FROM ${table} WHERE ${codeField} ${keyword} ORDER BY code2 LIMIT 50`);
             const raw = await sql(`SELECT * FROM ${table} WHERE ${codeField} ${keyword} ORDER BY code2 LIMIT 50`);
             const tambahan = params.type === 'idrg' ? 'dan jika accpdx = N maka tidak boleh dijadikan primary diagnosis"' : '';
             return {
@@ -121,10 +123,10 @@ const get = new Elysia({ prefix: '/grab' })
             const grouping_result: any = await sql(`SELECT * FROM idrg.grouping_results WHERE claim_id = ?`, [params.id]);
             let grouping_idrg = {};
             if (diagnosa_idrg.length === 0) {
-                diagnosa_idrg = await sql(`select ${params.id} AS claim_id, kd_penyakit AS code, display, prioritas as no, validcode from fastabiq.diagnosa_pasien LEFT JOIN idrg.icd_codes ON diagnosa_pasien.kd_penyakit = icd_codes.code where diagnosa_pasien.no_rawat=? order by diagnosa_pasien.prioritas asc`, [query.no_rawat]);
+                diagnosa_idrg = await sql(`select ${params.id} AS claim_id, kd_penyakit AS code, CONCAT(kd_penyakit," - ",description) AS display, prioritas as no, validcode from fastabiq.diagnosa_pasien LEFT JOIN idrg.icd_codes ON diagnosa_pasien.kd_penyakit = icd_codes.code where diagnosa_pasien.no_rawat=? order by diagnosa_pasien.prioritas asc`, [query.no_rawat]);
             }
             if (prosedur_idrg.length === 0) {
-                prosedur_idrg = await sql(`select ${params.id} AS claim_id, kode AS code, display, prioritas as no, validcode from fastabiq.prosedur_pasien LEFT JOIN idrg.icd_codes ON prosedur_pasien.kode = icd_codes.code where prosedur_pasien.no_rawat=? order by prosedur_pasien.prioritas asc`, [query.no_rawat]);
+                prosedur_idrg = await sql(`select ${params.id} AS claim_id, kode AS code, CONCAT(kode," - ",description) AS display, prioritas as no, 1 as multiplicity, validcode from fastabiq.prosedur_pasien LEFT JOIN idrg.icd_codes ON prosedur_pasien.kode = icd_codes.code where prosedur_pasien.no_rawat=? order by prosedur_pasien.prioritas asc`, [query.no_rawat]);
             }
             if (grouping_result.length > 0) {
                 const date = new Date(grouping_result[0].created_at);
@@ -148,14 +150,18 @@ const get = new Elysia({ prefix: '/grab' })
     })
     .get(
         "/inacbg/:id",
-        async ({ params }) => {
+        async ({ params, user }) => {
             const diagnosa_inacbg = await sql(`SELECT * FROM idrg.diagnosa_inacbg WHERE claim_id = ?`, [params.id]);
             const prosedur_inacbg = await sql(`SELECT * FROM idrg.procedures_inacbg WHERE claim_id = ?`, [params.id]);
             const grouping_inacbg: any = await sql(`SELECT * FROM idrg.grouping_inacbg WHERE claim_id = ?`, [params.id]);
-            const special_cmg = await sql(`SELECT * FROM idrg.grouping_inacbg_special_cmg WHERE grouping_inacbg_id = ? GROUP BY code`, [grouping_inacbg[0].id]) || null;
-            const special_cmg_option = await sql(`SELECT * FROM idrg.grouping_inacbg_special_cmg_option WHERE grouping_inacbg_id = ?`, [grouping_inacbg[0].id]) || null;
+            let special_cmg: any[] = [];
+            let special_cmg_option: any[] = [];
+            if (grouping_inacbg.length > 0) {
+                special_cmg = await sql(`SELECT * FROM idrg.grouping_inacbg_special_cmg WHERE grouping_inacbg_id = ? GROUP BY code`, [grouping_inacbg[0].id]) || null;
+                special_cmg_option = await sql(`SELECT * FROM idrg.grouping_inacbg_special_cmg_option WHERE grouping_inacbg_id = ?`, [grouping_inacbg[0].id]) || null;
+            }
             const grouping = grouping_inacbg.map((item: any) => {
-                item.info = `MOCHAMMAD SAIFUDDIN NOVIANTO SAPUTRA, AMD.RMIK @${new Date(item.created_at).toLocaleDateString('id-ID', { year: 'numeric', month: 'short', day: 'numeric' })} pukul ${new Date(item.created_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }).replace(':', '.')} ** Kelas C ** Tarif: TARIF RS KELAS C SWASTA`
+                item.info = `${user.nama} @${new Date(item.created_at).toLocaleDateString('id-ID', { year: 'numeric', month: 'short', day: 'numeric' })} pukul ${new Date(item.created_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }).replace(':', '.')} ** Kelas C ** Tarif: TARIF RS KELAS C SWASTA`
                 item.cbg = {
                     code: item.cbg_code,
                     description: item.cbg_description,
@@ -175,45 +181,19 @@ const get = new Elysia({ prefix: '/grab' })
     })
     .get("/berkas/:nomor_sep", async ({ params, status }) => {
         const claim: any = await sql(`SELECT patient_id,admission_id FROM idrg.claims WHERE nomor_sep = ?`, [params.nomor_sep]);
-        // console.log(claim)
         if (claim.length === 0 || claim[0].patient_id === null) {
-            if (!Bun.env.EKLAIM_URL) {
-                throw new Error("EKLAIM_URL environment variable is not defined");
-            }
-            let body: string = JSON.stringify({
+            let res = await forward({
                 metadata: { "method": "get_claim_data" },
                 data: { nomor_sep: params.nomor_sep }
             })
-            let header: any = { "Content-Type": "application/json" }
-            if (Bun.env.MODE !== "debug") {
-                body = inacbg_encrypt(body);
-                header = { "Content-Type": "application/x-www-form-urlencoded" }
+
+            if (res.metadata.code !== 200) {
+                status(400);
+                return { message: "Belum ada data klaim" }
+            } else {
+                return { url: `${Bun.env.BERKAS_URL}?pid=${res.response.data.patient_id}&adm=${res.response.data.admission_id}` }
             }
-            const raw: any = await fetch(Bun.env.EKLAIM_URL + mode, {
-                method: "POST",
-                headers: header,
-                body: body,
-            });
-            try {
-                let res: any
-                if (Bun.env.MODE !== "debug") {
-                    const text = await raw.text();
-                    const m = text.match(/----BEGIN ENCRYPTED DATA----\s*([\s\S]*?)\s*----END ENCRYPTED DATA----/);
-                    res = m ? m[1] : null;
-                    res = inacbg_decrypt(res);
-                    res = JSON.parse(res)
-                } else {
-                    res = raw.json();
-                }
-                if (res.metadata.code !== 200) {
-                    status(400);
-                    return { message: "Belum ada data klaim" }
-                } else {
-                    return { url: `${Bun.env.BERKAS_URL}?pid=${res.response.data.patient_id}&adm=${res.response.data.admission_id}` }
-                }
-            } catch (error) {
-                console.log(error);
-            }
+
         } else {
             return { url: `${Bun.env.BERKAS_URL}?pid=${claim[0].patient_id}&adm=${claim[0].admission_id}` }
         }

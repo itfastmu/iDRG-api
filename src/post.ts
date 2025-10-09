@@ -2,25 +2,10 @@ import Elysia, { t } from "elysia";
 import { sql } from "./connection";
 import { authMiddleware } from "./auth";
 import { User } from "./types";
+import { forward } from "./function";
 
-const mode = Bun.env.MODE === "debug" ? "?mode=debug" : "";
-const forward = async (body: unknown) => {
-    if (!Bun.env.EKLAIM_URL) {
-        throw new Error("EKLAIM_URL environment variable is not defined");
-    }
-    try {
-        const res = await fetch(Bun.env.EKLAIM_URL + mode, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(body),
-        });
-        return await res.json();
-    } catch (error) {
-        console.log(error);
-    }
-};
 const post = new Elysia({ prefix: '/send' })
-    .use(authMiddleware())
+    .use(authMiddleware)
     .post("/sitb-validate", async ({ body }) => {
         const res = await forward({
             metadata: { "method": "sitb_validate" },
@@ -42,10 +27,10 @@ const post = new Elysia({ prefix: '/send' })
                 },
                 data: body.data
             })
-            console.log(res);
+            // console.log(res);
             if (res.metadata.code === 200) {
-                // const claim: any = await sql(`INSERT INTO idrg.claims(nomor_kartu, nomor_sep, nomor_rm, nama_pasien, tgl_lahir, gender, status_claim) VALUES('${body.data.nomor_kartu}', '${body.data.nomor_sep}', '${body.data.nomor_rm}', '${body.data.nama_pasien}', '${body.data.tgl_lahir}', '${body.data.gender}', 'new claim') RETURNING id`);
-                return { ...res.response };
+                const claim: any = await sql(`INSERT INTO idrg.claims(nomor_kartu, nomor_sep, nomor_rm, nama_pasien, tgl_lahir, gender, patient_id, admission_id) VALUES('${body.data.nomor_kartu}', '${body.data.nomor_sep}', '${body.data.nomor_rm}', '${body.data.nama_pasien}', '${body.data.tgl_lahir}', '${body.data.gender}', '${res.response.patient_id}',${res.response.admission_id}) RETURNING id`);
+                return { ...res, claim_id: claim[0].id };
             } else {
                 return { error: res.metadata.message };
             }
@@ -57,7 +42,6 @@ const post = new Elysia({ prefix: '/send' })
     .post(
         "/set-claim-data",
         async ({ body, user }: { body: any, user: User }) => {
-            // body.data.kode_tarif = 'CS'
             const res = await forward({
                 metadata: {
                     "method": "set_claim_data",
@@ -71,7 +55,7 @@ const post = new Elysia({ prefix: '/send' })
             const placeholders = keys.map(() => "?").join(",");
             if (res.metadata.code === 200) {
                 // ambil key untuk tabel claims
-                const claim: any = await sql(`INSERT INTO idrg.claims(${keys.join(",")},patient_id,admission_id) VALUES(${placeholders},${res.response.patient_id},${res.response.admission_id}) RETURNING id`, values);
+                const claim: any = await sql(`INSERT INTO idrg.claim_details(${keys.join(",")},claim_id) VALUES(${placeholders},?) RETURNING id`, [...values, body.claim_id]);
                 // console.log(claim);
                 if (tarif_rs) {
                     const tarifKeys = Object.keys(tarif_rs);
@@ -80,11 +64,10 @@ const post = new Elysia({ prefix: '/send' })
                     const tarifSql = `INSERT INTO idrg.tarif_rs (claim_id, ${tarifKeys.join(",")})
                     VALUES (?, ${tarifKeys.map(() => "?").join(",")})`;
 
-                    await sql(tarifSql, [claim[0].id, ...tarifValues]);
+                    await sql(tarifSql, [body.claim_id, ...tarifValues]);
                 }
-                return { ...res, claim_id: claim[0].id };
+                return res;
             } else {
-                console.log(res)
                 if (res.metadata.error_no === 'E2009') {
                     await sql(`INSERT INTO idrg.claims(${keys.join(",")},status_claim) VALUES(${placeholders},?) RETURNING id`, [...values, 7]);
                 }
@@ -94,6 +77,7 @@ const post = new Elysia({ prefix: '/send' })
         },
         {
             body: t.Object({
+                claim_id: t.Number(),
                 data: t.Object({
                     nomor_sep: t.String(),
                     nomor_kartu: t.String(),
@@ -218,7 +202,7 @@ const post = new Elysia({ prefix: '/send' })
                 })
                 if (diagnosa.metadata.code === 200) {
                     await sql(`DELETE FROM idrg.diagnosa WHERE claim_id='${body.claim_id}'`);
-                    const diagnosa = body.diagnosa.map((item: any) => `('${body.claim_id}', '${item.code}', '${item.display}', ${item.no}, ${item.validcode}`).join(',');
+                    const diagnosa = body.diagnosa.map((item: any) => `('${body.claim_id}', '${item.code}', '${item.display}', ${item.no}, ${item.validcode})`).join(',');
                     await sql(`insert into idrg.diagnosa(claim_id, code, display, no, validcode) values${diagnosa}`);
                 }
                 const procedure = await forward({
@@ -423,7 +407,6 @@ const post = new Elysia({ prefix: '/send' })
                 metadata: { "method": "grouper", "stage": "2", "grouper": "inacbg" },
                 data: { nomor_sep: body.nomor_sep, special_cmg: body.special_cmg.map((item: any) => item.code).join('#') }
             })
-            console.log(res);
             if (res.metadata.code === 200) {
                 sql(`update idrg.grouping_inacbg set stage=2 where claim_id='${body.claim_id}'`);
                 if (res.response_inacbg.special_cmg) {
@@ -483,7 +466,6 @@ const post = new Elysia({ prefix: '/send' })
                 metadata: { "method": "claim_final" },
                 data: { nomor_sep: body.nomor_sep, coder_nik: user.nik ?? "3315070211930002" },
             })
-            console.log(res)
             if (res.metadata.code === 200) {
                 await sql(`update idrg.claims set status_claim = 6 where id = ${body.claim_id}`)
             }
@@ -515,7 +497,7 @@ const post = new Elysia({ prefix: '/send' })
                 data: { nomor_sep: body.nomor_sep }
             })
             if (res.metadata.code === 200) {
-                await sql(`update idrg.claims set status_claim = 4 where id = ${body.claim_id}`)
+                await sql(`update idrg.claims set status_claim = 7 where id = ${body.claim_id}`)
             }
             return res;
         },
