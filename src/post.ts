@@ -1,5 +1,7 @@
 import Elysia, { t } from "elysia";
 import { sql } from "./connection";
+import { authMiddleware } from "./auth";
+import { User } from "./types";
 
 const mode = Bun.env.MODE === "debug" ? "?mode=debug" : "";
 const forward = async (body: unknown) => {
@@ -18,6 +20,7 @@ const forward = async (body: unknown) => {
     }
 };
 const post = new Elysia({ prefix: '/send' })
+    .use(authMiddleware())
     .post("/sitb-validate", async ({ body }) => {
         const res = await forward({
             metadata: { "method": "sitb_validate" },
@@ -53,14 +56,14 @@ const post = new Elysia({ prefix: '/send' })
 
     .post(
         "/set-claim-data",
-        async ({ body }) => {
+        async ({ body, user }: { body: any, user: User }) => {
             // body.data.kode_tarif = 'CS'
             const res = await forward({
                 metadata: {
                     "method": "set_claim_data",
                     "nomor_sep": body.data.nomor_sep
                 },
-                data: { ...body.data, coder_nik: '3315070211930002' }
+                data: { ...body.data, coder_nik: user.nik ?? '3315070211930002' }
             })
             const { tarif_rs, ...claimData } = body.data;
             const keys = Object.keys(claimData);
@@ -215,7 +218,7 @@ const post = new Elysia({ prefix: '/send' })
                 })
                 if (diagnosa.metadata.code === 200) {
                     await sql(`DELETE FROM idrg.diagnosa WHERE claim_id='${body.claim_id}'`);
-                    const diagnosa = body.diagnosa.map((item: any) => `('${body.claim_id}', '${item.code}', '${item.display}', ${item.no}, ${item.validcode})`).join(',');
+                    const diagnosa = body.diagnosa.map((item: any) => `('${body.claim_id}', '${item.code}', '${item.display}', ${item.no}, ${item.validcode}`).join(',');
                     await sql(`insert into idrg.diagnosa(claim_id, code, display, no, validcode) values${diagnosa}`);
                 }
                 const procedure = await forward({
@@ -238,7 +241,7 @@ const post = new Elysia({ prefix: '/send' })
                     })
                     if (res.metadata.code === 200) {
                         await sql(`DELETE FROM idrg.grouping_results WHERE claim_id='${body.claim_id}'`);
-                        await sql(`INSERT INTO idrg.grouping_results(claim_id, mdc_number,mdc_description,drg_code,drg_description) values('${body.claim_id}', '${res.response_idrg.mdc_number}', '${res.response_idrg.mdc_description}', '${res.response_idrg.drg_code}', '${res.response_idrg.drg_description}')`);
+                        await sql(`INSERT INTO idrg.grouping_results(claim_id, mdc_number,mdc_description,drg_code,drg_description) values('${body.claim_id}', '${res.response_idrg.mdc_number}', '${res.response_idrg.mdc_description}', '${res.response_idrg.drg_code}', '${res.response_idrg.drg_description}, ${res.response_idrg.cost_weight}, ${res.response_idrg.nbr})')`);
                         const date = new Date();
                         const options = { year: 'numeric' as const, month: 'long' as const, day: 'numeric' as const };
                         const formattedDate = date.toLocaleDateString('id-ID', options);
@@ -348,7 +351,7 @@ const post = new Elysia({ prefix: '/send' })
 
     .post(
         "/grouping-inacbg-stage-1",
-        async ({ body }) => {
+        async ({ body, user }: { body: any, user: User }) => {
             const diagnosa = await forward({
                 metadata: { "method": "inacbg_diagnosa_set", "nomor_sep": body.nomor_sep },
                 data: { "diagnosa": body.diagnosa.map((item: any) => item.code).join('#') }
@@ -387,7 +390,7 @@ const post = new Elysia({ prefix: '/send' })
                 }
                 return {
                     ...res,
-                    info: `MOCHAMMAD SAIFUDDIN NOVIANTO SAPUTRA, AMD.RMIK @ ${new Date().toLocaleDateString('id-ID', { year: 'numeric', month: 'short', day: 'numeric' })} pukul ${new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }).replace(':', '.')} ** Kelas C ** Tarif: TARIF RS KELAS C SWASTA`
+                    info: `${user.nama} @ ${new Date().toLocaleDateString('id-ID', { year: 'numeric', month: 'short', day: 'numeric' })} pukul ${new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }).replace(':', '.')} ** Kelas C ** Tarif: TARIF RS KELAS C SWASTA`
                 };
             } else {
                 return { error: "Failed to set diagnosa or procedure" };
@@ -475,10 +478,10 @@ const post = new Elysia({ prefix: '/send' })
 
     .post(
         "/claim-final",
-        async ({ body }) => {
+        async ({ body, user }: { body: any, user: User }) => {
             const res = await forward({
                 metadata: { "method": "claim_final" },
-                data: { nomor_sep: body.nomor_sep, coder_nik: "3315070211930002" },
+                data: { nomor_sep: body.nomor_sep, coder_nik: user.nik ?? "3315070211930002" },
             })
             console.log(res)
             if (res.metadata.code === 200) {

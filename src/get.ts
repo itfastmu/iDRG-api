@@ -115,12 +115,17 @@ const get = new Elysia({ prefix: '/grab' })
     })
     .get(
         "/idrg/:id",
-        async ({ params }) => {
-            const diagnosa_idrg = await sql(`SELECT * FROM idrg.diagnosa WHERE claim_id = ?`, [params.id]);
-            const prosedur_idrg = await sql(`SELECT * FROM idrg.procedures WHERE claim_id = ?`, [params.id]);
+        async ({ params, query }) => {
+            let diagnosa_idrg = await sql(`SELECT * FROM idrg.diagnosa WHERE claim_id = ?`, [params.id]);
+            let prosedur_idrg = await sql(`SELECT * FROM idrg.procedures WHERE claim_id = ?`, [params.id]);
             const grouping_result: any = await sql(`SELECT * FROM idrg.grouping_results WHERE claim_id = ?`, [params.id]);
             let grouping_idrg = {};
-
+            if (diagnosa_idrg.length === 0) {
+                diagnosa_idrg = await sql(`select ${params.id} AS claim_id, kd_penyakit AS code, display, prioritas as no, validcode from fastabiq.diagnosa_pasien LEFT JOIN idrg.icd_codes ON diagnosa_pasien.kd_penyakit = icd_codes.code where diagnosa_pasien.no_rawat=? order by diagnosa_pasien.prioritas asc`, [query.no_rawat]);
+            }
+            if (prosedur_idrg.length === 0) {
+                prosedur_idrg = await sql(`select ${params.id} AS claim_id, kode AS code, display, prioritas as no, validcode from fastabiq.prosedur_pasien LEFT JOIN idrg.icd_codes ON prosedur_pasien.kode = icd_codes.code where prosedur_pasien.no_rawat=? order by prosedur_pasien.prioritas asc`, [query.no_rawat]);
+            }
             if (grouping_result.length > 0) {
                 const date = new Date(grouping_result[0].created_at);
                 const options = { year: 'numeric' as const, month: 'long' as const, day: 'numeric' as const };
@@ -138,7 +143,8 @@ const get = new Elysia({ prefix: '/grab' })
                 grouping_idrg
             };
         }, {
-        params: t.Object({ id: t.Number() })
+        params: t.Object({ id: t.Number() }),
+        query: t.Object({ no_rawat: t.Optional(t.String()) })
     })
     .get(
         "/inacbg/:id",
