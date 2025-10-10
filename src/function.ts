@@ -8,6 +8,7 @@ export const forward = async (body: unknown) => {
     }
 
     let header: any = { "Content-Type": "application/json" }
+    body = typeof body === "string" ? body : JSON.stringify(body)
     if (Bun.env.MODE !== "debug") {
         body = inacbg_encrypt(body);
         header = { "Content-Type": "application/x-www-form-urlencoded" }
