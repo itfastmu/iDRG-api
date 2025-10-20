@@ -7,16 +7,32 @@ import { forward } from "./function";
 const post = new Elysia({ prefix: '/send' })
     .use(authMiddleware)
     .post("/sitb-validate", async ({ body }) => {
+        const data = {
+            nomor_register_sitb: body.data.nomor_register_sitb,
+            nomor_sep: body.data.nomor_sep
+        }
         const res = await forward({
             metadata: { "method": "sitb_validate" },
-            data: body.data
+            data: data
         })
         if (res.metadata.code === 200) {
-            await sql(`INSERT INTO idrg.sitb(nomor_register_sitb,nomor_sep) VALUES('${body.data.nomor_register_sitb}', '${body.data.nomor_sep}')`);
+            await sql(`INSERT INTO idrg.sitb(nomor_register_sitb,nomor_rm) VALUES('${body.data.nomor_register_sitb}', '${body.data.nomor_rm}') ON DUPLICATE KEY UPDATE nomor_register_sitb = '${body.data.nomor_register_sitb}'`);
         }
         return res;
     }, {
-        body: t.Object({ "data": t.Object({ "nomor_sep": t.String(), "nomor_register_sitb": t.String() }) })
+        body: t.Object({ "data": t.Object({ "nomor_rm": t.String(), "nomor_sep": t.String(), "nomor_register_sitb": t.String() }) })
+    })
+    .post("/sitb-invalidate", async ({ body }) => {
+        const data = {
+            nomor_sep: body.data.nomor_sep
+        }
+        const res = await forward({
+            metadata: { "method": "sitb_invalidate" },
+            data: data
+        })
+        return res;
+    }, {
+        body: t.Object({ "data": t.Object({ "nomor_rm": t.String(), "nomor_sep": t.String(), "nomor_register_sitb": t.String() }) })
     })
     .post(
         "/new-claim",
@@ -225,7 +241,7 @@ const post = new Elysia({ prefix: '/send' })
                     })
                     if (res.metadata.code === 200) {
                         await sql(`DELETE FROM idrg.grouping_results WHERE claim_id='${body.claim_id}'`);
-                        await sql(`INSERT INTO idrg.grouping_results(claim_id, mdc_number,mdc_description,drg_code,drg_description) values('${body.claim_id}', '${res.response_idrg.mdc_number}', '${res.response_idrg.mdc_description}', '${res.response_idrg.drg_code}', '${res.response_idrg.drg_description}, ${res.response_idrg.cost_weight}, ${res.response_idrg.nbr})')`);
+                        await sql(`INSERT INTO idrg.grouping_results(claim_id, mdc_number,mdc_description,drg_code,drg_description, cost_weight, nbr) values('${body.claim_id}', '${res.response_idrg.mdc_number}', '${res.response_idrg.mdc_description}', '${res.response_idrg.drg_code}', '${res.response_idrg.drg_description}, ${res.response_idrg.cost_weight}, ${res.response_idrg.nbr})')`);
                         const date = new Date();
                         const options = { year: 'numeric' as const, month: 'long' as const, day: 'numeric' as const };
                         const formattedDate = date.toLocaleDateString('id-ID', options);
