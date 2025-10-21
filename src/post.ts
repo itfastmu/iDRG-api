@@ -241,7 +241,7 @@ const post = new Elysia({ prefix: '/send' })
                     })
                     if (res.metadata.code === 200) {
                         await sql(`DELETE FROM idrg.grouping_results WHERE claim_id='${body.claim_id}'`);
-                        await sql(`INSERT INTO idrg.grouping_results(claim_id, mdc_number,mdc_description,drg_code,drg_description, cost_weight, nbr) values('${body.claim_id}', '${res.response_idrg.mdc_number}', '${res.response_idrg.mdc_description}', '${res.response_idrg.drg_code}', '${res.response_idrg.drg_description}, ${res.response_idrg.cost_weight}, ${res.response_idrg.nbr})')`);
+                        await sql(`INSERT INTO idrg.grouping_results(claim_id, mdc_number,mdc_description,drg_code,drg_description, cost_weight, nbr) values('${body.claim_id}', '${res.response_idrg.mdc_number}', '${res.response_idrg.mdc_description}', '${res.response_idrg.drg_code}', '${res.response_idrg.drg_description}', ${res.response_idrg.cost_weight}, ${res.response_idrg.nbr})`);
                         const date = new Date();
                         const options = { year: 'numeric' as const, month: 'long' as const, day: 'numeric' as const };
                         const formattedDate = date.toLocaleDateString('id-ID', options);
