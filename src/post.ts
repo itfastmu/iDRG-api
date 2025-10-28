@@ -528,5 +528,17 @@ const post = new Elysia({ prefix: '/send' })
         }),
         { params: t.Object({ "nomor_sep": t.String() }) }
     )
+    .post("/cppt/hide", async ({ body }) => {
+        await sql(`INSERT INTO rsfs_vedika.cppt_unclaimed(no_rawat, jam_rawat) VALUES('${body.no_rawat}', '${body.jam_rawat}')`);
+        return { message: "CPPT berhasil disembunyikan" };
+    }, {
+        body: t.Object({ "no_rawat": t.String(), "jam_rawat": t.String() })
+    })
+    .post("/cppt/show", async ({ body }) => {
+        await sql(`DELETE FROM rsfs_vedika.cppt_unclaimed WHERE no_rawat = '${body.no_rawat}' AND jam_rawat = '${body.jam_rawat}'`);
+        return { message: "CPPT berhasil ditampilkan" };
+    }, {
+        body: t.Object({ "no_rawat": t.String(), "jam_rawat": t.String() })
+    })
 
 export default post;

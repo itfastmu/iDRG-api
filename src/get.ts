@@ -210,5 +210,34 @@ const get = new Elysia({ prefix: '/grab' })
         params: t.Object({ nomor_rm: t.String() }),
         query: t.Object({ claim_id: t.Optional(t.Number()) })
     })
+    .get("/cppt", async ({ query }) => {
+        const fields = `tgl_perawatan,
+  suhu_tubuh,
+  tensi,
+  nadi,
+  respirasi,
+  tinggi,
+  berat,
+  spo2,
+  gcs,
+  kesadaran,
+  keluhan,
+  pemeriksaan,
+  alergi,
+  rtl,
+  penilaian,
+  instruksi,
+  evaluasi,
+  nip
+`
+        const cppt: any = await sql(`SELECT rn.no_rawat, rn.jam_rawat, ${fields}, '' as lingkar_perut, 'Rawat Inap' as tipe, CASE WHEN cu.no_rawat IS NOT NULL THEN true ELSE false END AS checked FROM fastabiq.pemeriksaan_ranap AS rn LEFT JOIN rsfs_vedika.cppt_unclaimed AS cu ON rn.no_rawat = cu.no_rawat AND rn.jam_rawat = cu.jam_rawat WHERE rn.no_rawat = ?
+                                    UNION ALL
+                                    SELECT rl.no_rawat, rl.jam_rawat, ${fields}, lingkar_perut,'Rawat Jalan' as tipe, CASE WHEN cu.no_rawat IS NOT NULL THEN true ELSE false END AS checked FROM fastabiq.pemeriksaan_ralan AS rl LEFT JOIN rsfs_vedika.cppt_unclaimed AS cu ON rl.no_rawat = cu.no_rawat AND rl.jam_rawat = cu.jam_rawat WHERE rl.no_rawat = ?
+            `, [query.no_rawat, query.no_rawat]);
+
+        return cppt;
+    }, {
+        query: t.Object({ no_rawat: t.Optional(t.String()) })
+    })
 
 export default get;
