@@ -27,51 +27,337 @@ const get = new Elysia({ prefix: '/grab' })
         params: t.Object({ type: t.Optional(t.Union([t.Literal("rajal"), t.Literal("ranap")])) }),
         query: t.Object({ mulai: t.Optional(t.String()), sampai: t.Optional(t.String()) })
     })
+    .get("/resume/:no_rawat", async ({ params }) => {
+        const formattedNoRawat = params.no_rawat.replace(/-/g, "/");
+        const raw = await sql(
+            `SELECT * FROM resume_pasien_ranap WHERE no_rawat = ? LIMIT 1`,
+            [formattedNoRawat]
+        );
+        return { data: raw[0] };
+    }, {
+        params: t.Object({ no_rawat: t.String() })
+    })
+
+    .get("/triase/:no_rawat", async ({ params }) => {
+        const formattedNoRawat = params.no_rawat.replace(/-/g, "/");
+
+        try {
+            const triase = await sql(
+                `SELECT 
+        igd.no_rawat, igd.tgl_kunjungan, igd.cara_masuk, igd.kode_kasus,
+        mk.macam_kasus, igd.tekanan_darah, igd.pernapasan,igd.nadi, igd.suhu,
+        igd.saturasi_o2, igd.nyeri, sek.anamnesa_singkat, sek.catatan,
+        sek.plan, sek.tanggaltriase
+      FROM data_triase_igd AS igd
+      LEFT JOIN data_triase_igdsekunder AS sek ON sek.no_rawat = igd.no_rawat
+      LEFT JOIN master_triase_macam_kasus AS mk ON mk.kode_kasus = igd.kode_kasus
+      WHERE igd.no_rawat = ?
+      LIMIT 1`,
+                [formattedNoRawat]
+            );
+
+            // 🔹 Gabungkan semua skala 1–5 dengan UNION ALL
+            const pemeriksaan = await sql(
+                `
+      SELECT p.nama_pemeriksaan, s1.pengkajian_skala1 AS pengkajian
+      FROM data_triase_igddetail_skala1 d1
+      LEFT JOIN master_triase_skala1 s1 ON s1.kode_skala1 = d1.kode_skala1
+      LEFT JOIN master_triase_pemeriksaan p ON p.kode_pemeriksaan = s1.kode_pemeriksaan
+      WHERE d1.no_rawat = ?
+
+      UNION ALL
+
+      SELECT p.nama_pemeriksaan, s2.pengkajian_skala2 AS pengkajian
+      FROM data_triase_igddetail_skala2 d2
+      LEFT JOIN master_triase_skala2 s2 ON s2.kode_skala2 = d2.kode_skala2
+      LEFT JOIN master_triase_pemeriksaan p ON p.kode_pemeriksaan = s2.kode_pemeriksaan
+      WHERE d2.no_rawat = ?
+
+      UNION ALL
+
+      SELECT p.nama_pemeriksaan, s3.pengkajian_skala3 AS pengkajian
+      FROM data_triase_igddetail_skala3 d3
+      LEFT JOIN master_triase_skala3 s3 ON s3.kode_skala3 = d3.kode_skala3
+      LEFT JOIN master_triase_pemeriksaan p ON p.kode_pemeriksaan = s3.kode_pemeriksaan
+      WHERE d3.no_rawat = ?
+
+      UNION ALL
+
+      SELECT p.nama_pemeriksaan, s4.pengkajian_skala4 AS pengkajian
+      FROM data_triase_igddetail_skala4 d4
+      LEFT JOIN master_triase_skala4 s4 ON s4.kode_skala4 = d4.kode_skala4
+      LEFT JOIN master_triase_pemeriksaan p ON p.kode_pemeriksaan = s4.kode_pemeriksaan
+      WHERE d4.no_rawat = ?
+
+      UNION ALL
+
+      SELECT p.nama_pemeriksaan, s5.pengkajian_skala5 AS pengkajian
+      FROM data_triase_igddetail_skala5 d5
+      LEFT JOIN master_triase_skala5 s5 ON s5.kode_skala5 = d5.kode_skala5
+      LEFT JOIN master_triase_pemeriksaan p ON p.kode_pemeriksaan = s5.kode_pemeriksaan
+      WHERE d5.no_rawat = ?
+      `,
+                [
+                    formattedNoRawat,
+                    formattedNoRawat,
+                    formattedNoRawat,
+                    formattedNoRawat,
+                    formattedNoRawat,
+                ]
+            );
+
+
+            // 🔹 Gabungkan hasil akhir
+            const hasil = {
+                ...triase[0],
+                pemeriksaan: pemeriksaan.map((r: any) => ({
+                    nama_pemeriksaan: r.nama_pemeriksaan,
+                    pengkajian: r.pengkajian,
+                    tampilan: `${r.nama_pemeriksaan} : ${r.pengkajian}`,
+                })),
+            };
+
+            return { data: hasil };
+        } catch (error) {
+            console.error("❌ Error mengambil data triase:", error);
+            return {
+                error: true,
+                message: "Gagal mengambil data triase",
+                detail: (error as Error).message,
+            };
+        }
+    }, {
+        params: t.Object({
+            no_rawat: t.String(),
+        }),
+    })
+    .get("/ranap/:no_rawat", async ({ params }) => {
+        const noRawat = params.no_rawat.replace(/-/g, "/");
+
+        const rows = await sql(
+            `
+        SELECT 
+            pr.tgl_perawatan,
+            pr.jam_rawat,
+            pr.suhu_tubuh,
+            pr.tensi,
+            pr.nadi,
+            pr.respirasi,
+            pr.tinggi,
+            pr.berat,
+            pr.kesadaran,
+            pr.keluhan,
+            pr.pemeriksaan,
+            pr.alergi,
+            pr.penilaian,
+            pr.rtl,
+            pr.instruksi,
+            pr.evaluasi,
+
+            pg.nik AS nip,
+            pg.nama AS nama_petugas,
+
+            pp.gcs,
+            pp.td,
+            pp.hr,
+            pp.rr,
+            pp.suhu,
+            pp.spo2,
+            pp.tfu,
+            pp.kontraksi,
+            pp.perdarahan,
+            pp.keterangan
+
+        FROM pemeriksaan_ranap pr
+
+        LEFT JOIN pegawai pg
+            ON pr.nip = pg.nik
+
+        LEFT JOIN catatan_observasi_ranap_postpartum pp
+            ON pr.no_rawat = pp.no_rawat
+            AND pr.tgl_perawatan = pp.tgl_perawatan
+            AND (
+                pp.gcs IS NOT NULL OR
+                pp.td IS NOT NULL OR
+                pp.hr IS NOT NULL OR
+                pp.rr IS NOT NULL OR
+                pp.suhu IS NOT NULL OR
+                pp.spo2 IS NOT NULL OR
+                pp.tfu IS NOT NULL OR
+                pp.kontraksi IS NOT NULL OR
+                pp.perdarahan IS NOT NULL OR
+                pp.keterangan IS NOT NULL
+            )
+
+        WHERE pr.no_rawat = ?
+        ORDER BY pr.tgl_perawatan, pr.jam_rawat
+        `,
+            [noRawat]
+        );
+
+        console.log("→ Rows fetched:", rows.length);
+        console.log("→ Data sample:", rows[0] || "Kosong");
+
+        return { data: rows };
+    })
+
+    .get("/obat/:no_rawat", async ({ params }) => {
+        const formattedNoRawat = params.no_rawat.replace(/-/g, "/");
+
+        const raw = await sql(
+            `SELECT 
+        dpo.no_rawat,
+        dpo.kode_brng,
+        db.nama_brng,
+        db.h_beli AS harga_beli,
+        dpo.biaya_obat,
+        dpo.jml AS jumlah,
+        dpo.tgl_perawatan,
+        dpo.jam,
+        dpo.total,
+        bpjs.no_sep,
+        bpjs.kd_obat,
+        bpjs.nm_obat,
+        bpjs.no_srb
+     FROM detail_pemberian_obat AS dpo
+     LEFT JOIN databarang AS db ON db.kode_brng = dpo.kode_brng
+     LEFT JOIN bridging_srb_bpjs_obat AS bpjs ON bpjs.kd_obat = dpo.kode_brng
+     WHERE dpo.no_rawat = ?`,
+            [formattedNoRawat]
+        );
+
+        if (!raw || raw.length === 0) {
+            return { success: false, message: "Data obat tidak ditemukan", data: null };
+        }
+
+        return { success: true, data: raw };
+    }, {
+        params: t.Object({ no_rawat: t.String() })
+    })
+
+
+    .get("/billing/:no_rawat", async ({ params }) => {
+        const formattedNoRawat = params.no_rawat.replace(/-/g, "/");
+        const raw = await sql(
+            `SELECT no_rawat, tgl_byr, no, nm_perawatan, pemisah, biaya, jumlah, tambahan, totalbiaya, status
+        FROM billing
+        WHERE no_rawat = ?`,
+            [formattedNoRawat]
+        );
+
+        if (!raw || raw.length === 0) {
+            return { success: false, message: "Data billing tidak ditemukan", data: null };
+        }
+        return { success: true, data: raw };
+    }, {
+        params: t.Object({ no_rawat: t.String() })
+    })
+
     .get(
         "/pasien/*",
         async ({ params }) => {
-            // const tanggal = query.mulai ? query.sampai ? `AND reg_periksa.tgl_registrasi BETWEEN '${query.mulai}' AND '${query.sampai}'` : `AND reg_periksa.tgl_registrasi >= '${query.mulai}'` : `AND YEAR(reg_periksa.tgl_registrasi) = YEAR(CURDATE()) AND MONTH(reg_periksa.tgl_registrasi) = MONTH(CURDATE())`;
-
-            const fields = `r.no_rawat, r.no_rkm_medis, r.kd_poli, DATE_FORMAT(r.tgl_registrasi, '%Y-%m-%d %H:%i:%s') AS tgl_registrasi, case when status_lanjut = 'Ralan' then 'Rawat Jalan' else 'Rawat Inap' end as status, bs.no_sep, bs.no_kartu, bs.klsrawat, bs.klsnaik, p.nm_pasien, p.tgl_lahir, p.jk, CASE WHEN n.bb IS NULL THEN '-' ELSE n.bb END AS berat, CASE WHEN tb.kesimpulan_skrining = 'Terduga TBC' THEN 1 ELSE (CASE WHEN nomor_register_sitb IS NOT NULL THEN 1 ELSE 0 END) END AS tb, k.stts_pulang, d.nm_dokter as dokter,cl.id as claim_id, cl.status_claim, 
-            CASE
-                WHEN r.kd_poli = 'IGDK' THEN pi.td
-                ELSE pr.td
-            END AS td,
-            MIN(STR_TO_DATE(CONCAT(k.tgl_masuk, ' ', k.jam_masuk), '%Y-%m-%d %H:%i:%s')) AS waktu_masuk,
-            MAX(
-                NULLIF(
-                    STR_TO_DATE(CONCAT(k.tgl_keluar, ' ', k.jam_keluar), '%Y-%m-%d %H:%i:%s'),
-                    '0000-00-00 00:00:00'
-                )
-            ) AS waktu_keluar,
-            SUM(case when b.status IN  ('Ralan Dokter Paramedis','Ranap Dokter Paramedis') and b.nm_perawatan not like '%terapi%' then b.totalbiaya ELSE 0 END) AS prosedur_non_bedah,
-            SUM(case when b.status='Operasi' then b.totalbiaya ELSE 0 END) AS prosedur_bedah,
-            SUM(case when b.status IN ('Ralan Dokter','Ranap Dokter') then b.totalbiaya ELSE 0 END) AS konsultasi,
-            0 as tenaga_ahli,
-            SUM(case when b.status IN ('Ralan Paramedis','Ranap Paramedis') then b.totalbiaya ELSE 0 END) AS keperawatan,
-            0 as penunjang,
-            SUM(case when b.status = 'Radiologi' then b.totalbiaya ELSE 0 END) AS radiologi,
-            SUM(case when b.status = 'Laborat' then b.totalbiaya ELSE 0 END) AS laboratorium,
-            0 as pelayanan_darah,
-            SUM(case when b.status IN  ('Ralan Dokter Paramedis','Ranap Dokter Paramedis') and b.nm_perawatan like '%terapi%' then b.totalbiaya ELSE 0 END) AS rehabilitasi,
-            SUM(case when b.status = 'Kamar' then b.totalbiaya ELSE 0 END)+r.biaya_reg AS kamar,
-            0 as rawat_intensif,
-            SUM(case when b.status IN ('Obat', 'Retur Obat', 'Resep Pulang') and b.nm_perawatan not like '%kemo%' and b.nm_perawatan not like '%kronis%' then b.totalbiaya ELSE 0 END) AS obat,
-            SUM(case when b.status = 'Obat' and b.nm_perawatan like '%kronis%' then b.totalbiaya ELSE 0 END) AS obat_kronis,
-            SUM(case when b.status = 'Obat' and b.nm_perawatan like '%kemo%' then b.totalbiaya ELSE 0 END) AS obat_kemeterapi,
-            0 as alkes,
-            SUM(case when b.status = 'Tambahan' then b.totalbiaya ELSE 0 END) AS bmhp,
-            SUM(case when b.status IN ('Harian','Service') then b.totalbiaya ELSE 0 END) AS sewa_alat`;
+            const fields = `
+      r.no_rawat,
+      r.no_rkm_medis,
+      r.kd_poli,
+      DATE_FORMAT(r.tgl_registrasi, '%Y-%m-%d %H:%i:%s') AS tgl_registrasi,
+      CASE WHEN status_lanjut = 'Ralan' THEN 'Rawat Jalan' ELSE 'Rawat Inap' END AS status,
+      bs.no_sep,
+      bs.no_kartu,
+      bs.klsrawat,
+      bs.klsnaik,
+      bs.catatan,
+      bs.notelep,
+      bs.tglrujukan AS tgl_rujukan,
+      bs.nmpolitujuan AS poli_tujuan,
+      bs.noskdp AS no_spri,
+      bs.nmdiagnosaawal AS diagnosa_awal,
+      bs.peserta AS peserta_bpjs,
+      p.nm_pasien,
+      p.alamat AS alamat,
+      p.pekerjaan,
+      p.tgl_lahir,
+      p.jk,
+      CASE WHEN n.bb IS NULL THEN '-' ELSE n.bb END AS berat,
+      CASE WHEN tb.kesimpulan_skrining = 'Terduga TBC' THEN 1
+           ELSE (CASE WHEN nomor_register_sitb IS NOT NULL THEN 1 ELSE 0 END)
+      END AS tb,
+      k.stts_pulang,
+      d.nm_dokter AS dokter,
+      cl.id AS claim_id,
+      cl.status_claim,
+      CASE
+        WHEN r.kd_poli = 'IGDK' THEN pi.td
+        ELSE pr.td
+      END AS td,
+      MIN(STR_TO_DATE(CONCAT(k.tgl_masuk, ' ', k.jam_masuk), '%Y-%m-%d %H:%i:%s')) AS waktu_masuk,
+      MAX(
+        NULLIF(
+          STR_TO_DATE(CONCAT(k.tgl_keluar, ' ', k.jam_keluar), '%Y-%m-%d %H:%i:%s'),
+          '0000-00-00 00:00:00'
+        )
+      ) AS waktu_keluar,
+      SUM(CASE WHEN b.status IN ('Ralan Dokter Paramedis','Ranap Dokter Paramedis')
+               AND b.nm_perawatan NOT LIKE '%terapi%'
+               THEN b.totalbiaya ELSE 0 END) AS prosedur_non_bedah,
+      SUM(CASE WHEN b.status='Operasi' THEN b.totalbiaya ELSE 0 END) AS prosedur_bedah,
+      SUM(CASE WHEN b.status IN ('Ralan Dokter','Ranap Dokter') THEN b.totalbiaya ELSE 0 END) AS konsultasi,
+      0 AS tenaga_ahli,
+      SUM(CASE WHEN b.status IN ('Ralan Paramedis','Ranap Paramedis') THEN b.totalbiaya ELSE 0 END) AS keperawatan,
+      0 AS penunjang,
+      SUM(CASE WHEN b.status = 'Radiologi' THEN b.totalbiaya ELSE 0 END) AS radiologi,
+      SUM(CASE WHEN b.status = 'Laborat' THEN b.totalbiaya ELSE 0 END) AS laboratorium,
+      0 AS pelayanan_darah,
+      SUM(CASE WHEN b.status IN ('Ralan Dokter Paramedis','Ranap Dokter Paramedis')
+               AND b.nm_perawatan LIKE '%terapi%' THEN b.totalbiaya ELSE 0 END) AS rehabilitasi,
+      SUM(CASE WHEN b.status = 'Kamar' THEN b.totalbiaya ELSE 0 END)+r.biaya_reg AS kamar,
+      0 AS rawat_intensif,
+      SUM(CASE WHEN b.status IN ('Obat', 'Retur Obat', 'Resep Pulang')
+               AND b.nm_perawatan NOT LIKE '%kemo%'
+               AND b.nm_perawatan NOT LIKE '%kronis%'
+               THEN b.totalbiaya ELSE 0 END) AS obat,
+      SUM(CASE WHEN b.status = 'Obat' AND b.nm_perawatan LIKE '%kronis%' THEN b.totalbiaya ELSE 0 END) AS obat_kronis,
+      SUM(CASE WHEN b.status = 'Obat' AND b.nm_perawatan LIKE '%kemo%' THEN b.totalbiaya ELSE 0 END) AS obat_kemoterapi,
+      0 AS alkes,
+      SUM(CASE WHEN b.status = 'Tambahan' THEN b.totalbiaya ELSE 0 END) AS bmhp,
+      SUM(CASE WHEN b.status IN ('Harian','Service') THEN b.totalbiaya ELSE 0 END) AS sewa_alat,
+      pl.noorder AS no_lab
+    `;
 
             try {
-                const raw = await sql(`SELECT ${fields} FROM reg_periksa AS r LEFT JOIN pasien AS p ON r.no_rkm_medis = p.no_rkm_medis LEFT JOIN bridging_sep AS bs ON r.no_rawat = bs.no_rawat LEFT JOIN kamar_inap as k on r.no_rawat = k.no_rawat LEFT JOIN billing AS b ON r.no_rawat = b.no_rawat LEFT JOIN penilaian_medis_ranap_neonatus AS n ON r.no_rawat = n.no_rawat LEFT JOIN skrining_tbc AS tb ON r.no_rawat = tb.no_rawat LEFT JOIN dokter AS d ON r.kd_dokter = d.kd_dokter LEFT JOIN idrg.claims AS cl ON bs.no_sep = cl.nomor_sep LEFT JOIN penilaian_medis_igd as pi ON r.no_rawat = pi.no_rawat LEFT JOIN penilaian_medis_ralan AS pr ON r.no_rawat = pr.no_rawat LEFT JOIN idrg.sitb ON sitb.nomor_rm = r.no_rkm_medis WHERE r.kd_pj = 'BPJ' AND r.no_rawat = ? GROUP BY r.no_rawat`, [params['*']]);
+                const raw = await sql(`
+        SELECT ${fields}
+        FROM reg_periksa AS r
+        LEFT JOIN pasien AS p ON r.no_rkm_medis = p.no_rkm_medis
+        LEFT JOIN bridging_sep AS bs ON r.no_rawat = bs.no_rawat
+        LEFT JOIN kamar_inap AS k ON r.no_rawat = k.no_rawat
+        LEFT JOIN billing AS b ON r.no_rawat = b.no_rawat
+        LEFT JOIN penilaian_medis_ranap_neonatus AS n ON r.no_rawat = n.no_rawat
+        LEFT JOIN skrining_tbc AS tb ON r.no_rawat = tb.no_rawat
+        LEFT JOIN dokter AS d ON r.kd_dokter = d.kd_dokter
+        LEFT JOIN idrg.claims AS cl ON bs.no_sep = cl.nomor_sep
+        LEFT JOIN penilaian_medis_igd AS pi ON r.no_rawat = pi.no_rawat
+        LEFT JOIN penilaian_medis_ralan AS pr ON r.no_rawat = pr.no_rawat
+        LEFT JOIN idrg.sitb ON sitb.nomor_rm = r.no_rkm_medis
+        LEFT JOIN permintaan_lab AS pl ON pl.no_rawat = r.no_rawat
+        WHERE r.kd_pj = 'BPJ'
+          AND r.no_rawat = ?
+        GROUP BY r.no_rawat
+      `, [params['*']]);
+
                 return { data: raw };
             } catch (error) {
                 console.log(error);
             }
-        }, {
-        params: t.Object({ '*': t.RegExp(/^\d{4}\/\d{2}\/\d{2}\/\d{6}$/) })
-    })
+        },
+        {
+            params: t.Object({
+                '*': t.RegExp(/^\d{4}\/\d{2}\/\d{2}\/\d{6}$/)
+            })
+        }
+    )
+
+
     .get(
         "/dokter",
         async () => {
@@ -212,28 +498,28 @@ const get = new Elysia({ prefix: '/grab' })
     })
     .get("/cppt", async ({ query }) => {
         const fields = `tgl_perawatan,
-  suhu_tubuh,
-  tensi,
-  nadi,
-  respirasi,
-  tinggi,
-  berat,
-  spo2,
-  gcs,
-  kesadaran,
-  keluhan,
-  pemeriksaan,
-  alergi,
-  rtl,
-  penilaian,
-  instruksi,
-  evaluasi,
-  nip
-`
+    suhu_tubuh,
+    tensi,
+    nadi,
+    respirasi,
+    tinggi,
+    berat,
+    spo2,
+    gcs,
+    kesadaran,
+    keluhan,
+    pemeriksaan,
+    alergi,
+    rtl,
+    penilaian,
+    instruksi,
+    evaluasi,
+    nip
+    `
         const cppt: any = await sql(`SELECT rn.no_rawat, rn.jam_rawat, ${fields}, '' as lingkar_perut, 'Rawat Inap' as tipe, CASE WHEN cu.no_rawat IS NOT NULL THEN true ELSE false END AS checked FROM fastabiq.pemeriksaan_ranap AS rn LEFT JOIN rsfs_vedika.cppt_unclaimed AS cu ON rn.no_rawat = cu.no_rawat AND rn.jam_rawat = cu.jam_rawat WHERE rn.no_rawat = ?
-                                    UNION ALL
-                                    SELECT rl.no_rawat, rl.jam_rawat, ${fields}, lingkar_perut,'Rawat Jalan' as tipe, CASE WHEN cu.no_rawat IS NOT NULL THEN true ELSE false END AS checked FROM fastabiq.pemeriksaan_ralan AS rl LEFT JOIN rsfs_vedika.cppt_unclaimed AS cu ON rl.no_rawat = cu.no_rawat AND rl.jam_rawat = cu.jam_rawat WHERE rl.no_rawat = ?
-            `, [query.no_rawat, query.no_rawat]);
+                                        UNION ALL
+                                        SELECT rl.no_rawat, rl.jam_rawat, ${fields}, lingkar_perut,'Rawat Jalan' as tipe, CASE WHEN cu.no_rawat IS NOT NULL THEN true ELSE false END AS checked FROM fastabiq.pemeriksaan_ralan AS rl LEFT JOIN rsfs_vedika.cppt_unclaimed AS cu ON rl.no_rawat = cu.no_rawat AND rl.jam_rawat = cu.jam_rawat WHERE rl.no_rawat = ?
+                `, [query.no_rawat, query.no_rawat]);
 
         return cppt;
     }, {
