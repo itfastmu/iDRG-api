@@ -7,7 +7,7 @@ import { forward } from "./function";
 const mode = Bun.env.MODE === "debug" ? "?mode=debug" : "";
 
 const get = new Elysia({ prefix: '/grab' })
-    // .use(authMiddleware)
+    .use(authMiddleware)
     .get(
         "/list/:type?",
         async ({ params, query }) => {
