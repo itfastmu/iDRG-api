@@ -7,7 +7,7 @@ import { forward } from "./function";
 const mode = Bun.env.MODE === "debug" ? "?mode=debug" : "";
 
 const get = new Elysia({ prefix: '/grab' })
-    .use(authMiddleware)
+    // .use(authMiddleware)
     .get(
         "/list/:type?",
         async ({ params, query }) => {
@@ -29,14 +29,27 @@ const get = new Elysia({ prefix: '/grab' })
     })
     .get("/resume/:no_rawat", async ({ params }) => {
         const formattedNoRawat = params.no_rawat.replace(/-/g, "/");
+
         const raw = await sql(
-            `SELECT * FROM resume_pasien_ranap WHERE no_rawat = ? LIMIT 1`,
+            `
+    SELECT 
+        r.*,
+        p.nama AS nama_petugas_radiologi
+    FROM resume_pasien_ranap r
+    LEFT JOIN periksa_radiologi pr ON pr.no_rawat = r.no_rawat
+    LEFT JOIN petugas p ON p.nip = pr.nip
+    WHERE r.no_rawat = ?
+    LIMIT 1
+    `,
             [formattedNoRawat]
         );
+
         return { data: raw[0] };
     }, {
         params: t.Object({ no_rawat: t.String() })
     })
+
+
 
     .get("/triase/:no_rawat", async ({ params }) => {
         const formattedNoRawat = params.no_rawat.replace(/-/g, "/");
@@ -106,8 +119,6 @@ const get = new Elysia({ prefix: '/grab' })
                 ]
             );
 
-
-            // 🔹 Gabungkan hasil akhir
             const hasil = {
                 ...triase[0],
                 pemeriksaan: pemeriksaan.map((r: any) => ({
@@ -155,39 +166,11 @@ const get = new Elysia({ prefix: '/grab' })
             pr.evaluasi,
 
             pg.nik AS nip,
-            pg.nama AS nama_petugas,
-
-            pp.gcs,
-            pp.td,
-            pp.hr,
-            pp.rr,
-            pp.suhu,
-            pp.spo2,
-            pp.tfu,
-            pp.kontraksi,
-            pp.perdarahan,
-            pp.keterangan
+            pg.nama AS nama_petugas
 
         FROM pemeriksaan_ranap pr
-
         LEFT JOIN pegawai pg
             ON pr.nip = pg.nik
-
-        LEFT JOIN catatan_observasi_ranap_postpartum pp
-            ON pr.no_rawat = pp.no_rawat
-            AND pr.tgl_perawatan = pp.tgl_perawatan
-            AND (
-                pp.gcs IS NOT NULL OR
-                pp.td IS NOT NULL OR
-                pp.hr IS NOT NULL OR
-                pp.rr IS NOT NULL OR
-                pp.suhu IS NOT NULL OR
-                pp.spo2 IS NOT NULL OR
-                pp.tfu IS NOT NULL OR
-                pp.kontraksi IS NOT NULL OR
-                pp.perdarahan IS NOT NULL OR
-                pp.keterangan IS NOT NULL
-            )
 
         WHERE pr.no_rawat = ?
         ORDER BY pr.tgl_perawatan, pr.jam_rawat
@@ -195,8 +178,125 @@ const get = new Elysia({ prefix: '/grab' })
             [noRawat]
         );
 
-        console.log("→ Rows fetched:", rows.length);
-        console.log("→ Data sample:", rows[0] || "Kosong");
+        return { data: rows };
+    })
+
+    .get("/ralan/:no_rawat", async ({ params }) => {
+        const noRawat = params.no_rawat.replace(/-/g, "/");
+
+        const rows = await sql(
+            `
+        SELECT 
+            pr.tgl_perawatan,
+            pr.jam_rawat,
+            pr.suhu_tubuh,
+            pr.tensi,
+            pr.nadi,
+            pr.respirasi,
+            pr.tinggi,
+            pr.berat,
+            pr.kesadaran,
+            pr.keluhan,
+            pr.pemeriksaan,
+            pr.alergi,
+            pr.penilaian,
+            pr.rtl,
+            pr.instruksi,
+            pr.evaluasi,
+
+            pg.nik AS nip,
+            pg.nama AS nama_petugas
+
+        FROM pemeriksaan_ralan pr
+        LEFT JOIN pegawai pg
+            ON pr.nip = pg.nik
+
+        WHERE pr.no_rawat = ?
+        ORDER BY pr.tgl_perawatan DESC, pr.jam_rawat DESC
+
+        `,
+            [noRawat]
+        );
+
+        return { data: rows };
+    })
+
+    .get("/tindakan/:no_rawat", async ({ params }) => {
+        const noRawat = params.no_rawat.replace(/-/g, "/");
+
+        const rows = await sql(
+            `
+        SELECT 
+            lt.no_rawat,
+            lt.tanggal,
+            lt.kd_dokter,
+            d.nm_dokter,
+            lt.diagnosa_pra_tindakan,
+            lt.diagnosa_pasca_tindakan,
+            lt.tindakan_medik,
+            lt.uraian,
+            lt.hasil,
+            lt.kesimpulan
+        FROM laporan_tindakan lt
+        LEFT JOIN dokter d
+            ON lt.kd_dokter = d.kd_dokter
+        WHERE lt.no_rawat = ?
+        ORDER BY lt.tanggal
+        `,
+            [noRawat]
+        );
+
+
+        return { data: rows };
+    })
+
+    .get("/igd/:no_rawat", async ({ params }) => {
+        const noRawat = params.no_rawat.replace(/-/g, "/");
+
+        const rows = await sql(
+            `
+        SELECT
+            igd.keluhan_utama,
+            igd.anamnesis,
+            igd.rps,
+            igd.tanggal,
+            igd.gcs,
+            igd.rpd,
+            igd.rpk,
+            igd.rpo,
+            igd.alergi,
+            igd.keadaan,
+            igd.kesadaran,
+            igd.kepala,
+            igd.mata,
+            igd.gigi,
+            igd.leher,
+            igd.thoraks,
+            igd.abdomen,
+            igd.genital,
+            igd.ekstremitas,
+            igd.ket_fisik,
+            igd.ket_lokalis,
+            igd.ekg,    
+            igd.rad,
+            igd.lab,
+            igd.diagnosis,
+            igd.tata,
+            igd.td,
+            igd.nadi,
+            igd.rr,
+            igd.suhu,
+            igd.spo,
+            igd.bb,
+            igd.tb,
+            igd.kd_dokter,
+            d.nm_dokter
+        FROM penilaian_medis_igd AS igd
+        LEFT JOIN dokter AS d ON d.kd_dokter = igd.kd_dokter
+        WHERE igd.no_rawat = ?
+        `,
+            [noRawat]
+        );
 
         return { data: rows };
     })
@@ -226,8 +326,130 @@ const get = new Elysia({ prefix: '/grab' })
             [formattedNoRawat]
         );
 
+        return { success: true, data: raw };
+    }, {
+        params: t.Object({ no_rawat: t.String() })
+    })
+    .get("/operasi/:no_rawat", async ({ params }) => {
+        const formattedNoRawat = params.no_rawat.replace(/-/g, "/");
+
+        const raw = await sql(
+            `SELECT 
+            l.no_rawat,
+            l.tanggal AS tanggal_laporan,
+            l.diagnosa_preop,
+            l.diagnosa_postop,
+            l.jaringan_dieksekusi,
+            l.selesaioperasi,
+            l.permintaan_pa,
+            l.laporan_operasi,
+
+            o.tgl_operasi,
+            o.kategori,
+
+            o.operator1,
+            d1.nm_dokter AS operator1_nama,
+
+            o.operator2,
+            d2.nm_dokter AS operator2_nama,
+
+            o.operator3,
+            d3.nm_dokter AS operator3_nama,
+
+            o.dokter_anestesi,
+            danes.nm_dokter AS dokter_anestesi_nama,
+
+            o.dokter_umum,
+            dumum.nm_dokter AS dokter_umum_nama,
+
+            o.dokter_anak,
+            danak.nm_dokter AS dokter_anak_nama,
+
+            o.dokter_pjanak,
+            dpjanak.nm_dokter AS dokter_pjanak_nama,
+
+            o.asisten_operator1,
+            p_aop1.nama AS asisten_operator1_nama,
+
+            o.asisten_operator2,
+            p_aop2.nama AS asisten_operator2_nama,
+
+            o.asisten_operator3,
+            p_aop3.nama AS asisten_operator3_nama,
+
+            o.asisten_anestesi,
+            p_aan.nama AS asisten_anestesi_nama,
+
+            o.asisten_anestesi2,
+            p_aan2.nama AS asisten_anestesi2_nama,
+
+            o.perawaat_resusitas,
+            p_res.nama AS perawat_resusitas_nama,
+
+            o.bidan,
+            p_bidan1.nama AS bidan1_nama,
+
+            o.bidan2,
+            p_bidan2.nama AS bidan2_nama,
+
+            o.bidan3,
+            p_bidan3.nama AS bidan3_nama,
+
+            o.omloop,
+            p_om1.nama AS omloop1_nama,
+
+            o.omloop2,
+            p_om2.nama AS omloop2_nama,
+
+            o.omloop3,
+            p_om3.nama AS omloop3_nama,
+
+            o.omloop4,
+            p_om4.nama AS omloop4_nama,
+
+            o.omloop5,
+            p_om5.nama AS omloop5_nama,
+
+           o.instrumen,
+            p_ins.nama AS instrumen_nama
+
+        FROM laporan_operasi l
+        LEFT JOIN operasi o ON l.no_rawat = o.no_rawat
+
+        LEFT JOIN dokter d1 ON o.operator1 = d1.kd_dokter
+        LEFT JOIN dokter d2 ON o.operator2 = d2.kd_dokter
+        LEFT JOIN dokter d3 ON o.operator3 = d3.kd_dokter
+        LEFT JOIN dokter danes ON o.dokter_anestesi = danes.kd_dokter
+        LEFT JOIN dokter dumum ON o.dokter_umum = dumum.kd_dokter
+        LEFT JOIN dokter danak ON o.dokter_anak = danak.kd_dokter
+        LEFT JOIN dokter dpjanak ON o.dokter_pjanak = dpjanak.kd_dokter
+
+        LEFT JOIN petugas p_aop1 ON o.asisten_operator1 = p_aop1.nip
+        LEFT JOIN petugas p_aop2 ON o.asisten_operator2 = p_aop2.nip
+        LEFT JOIN petugas p_aop3 ON o.asisten_operator3 = p_aop3.nip
+        LEFT JOIN petugas p_ins ON o.instrumen = p_ins.nip
+        
+        LEFT JOIN petugas p_aan ON o.asisten_anestesi = p_aan.nip
+        LEFT JOIN petugas p_aan2 ON o.asisten_anestesi2 = p_aan2.nip
+
+        LEFT JOIN petugas p_res ON o.perawaat_resusitas = p_res.nip
+        
+        LEFT JOIN petugas p_bidan1 ON o.bidan = p_bidan1.nip
+        LEFT JOIN petugas p_bidan2 ON o.bidan2 = p_bidan2.nip
+        LEFT JOIN petugas p_bidan3 ON o.bidan3 = p_bidan3.nip
+
+        LEFT JOIN petugas p_om1 ON o.omloop = p_om1.nip
+        LEFT JOIN petugas p_om2 ON o.omloop2 = p_om2.nip
+        LEFT JOIN petugas p_om3 ON o.omloop3 = p_om3.nip
+        LEFT JOIN petugas p_om4 ON o.omloop4 = p_om4.nip
+        LEFT JOIN petugas p_om5 ON o.omloop5 = p_om5.nip
+
+        WHERE l.no_rawat = ?`,
+            [formattedNoRawat]
+        );
+
         if (!raw || raw.length === 0) {
-            return { success: false, message: "Data obat tidak ditemukan", data: null };
+            return { success: false, message: "Data operasi tidak ditemukan", data: null };
         }
 
         return { success: true, data: raw };
@@ -235,6 +457,30 @@ const get = new Elysia({ prefix: '/grab' })
         params: t.Object({ no_rawat: t.String() })
     })
 
+    .get("/surat_kontrol/:no_rawat", async ({ params }) => {
+        const formattedNoRawat = params.no_rawat.replace(/-/g, "/");
+
+        const data = await sql(
+            `SELECT 
+            sk.no_sep,
+            sk.tgl_surat,
+            sk.tgl_rencana,
+            sk.kd_dokter_bpjs,
+            sk.nm_dokter_bpjs,
+            sk.kd_poli_bpjs,
+            sk.nm_poli_bpjs
+        FROM bridging_surat_kontrol_bpjs sk
+        INNER JOIN bridging_sep bs ON sk.no_sep = bs.no_sep
+        WHERE bs.no_rawat = ?
+        ORDER BY sk.tgl_surat DESC
+        LIMIT 1`,
+            [formattedNoRawat]
+        );
+
+        return data[0];
+    }, {
+        params: t.Object({ no_rawat: t.String() })
+    })
 
     .get("/billing/:no_rawat", async ({ params }) => {
         const formattedNoRawat = params.no_rawat.replace(/-/g, "/");
@@ -245,13 +491,154 @@ const get = new Elysia({ prefix: '/grab' })
             [formattedNoRawat]
         );
 
-        if (!raw || raw.length === 0) {
-            return { success: false, message: "Data billing tidak ditemukan", data: null };
-        }
         return { success: true, data: raw };
     }, {
         params: t.Object({ no_rawat: t.String() })
     })
+
+    .get("/medik/:no_rawat", async ({ params }) => {
+        const formattedNoRawat = params.no_rawat.replace(/-/g, "/");
+
+        const raw = await sql(
+            `SELECT 
+        km.no_rawat,
+        km.no_permintaan,
+        km.tanggal,
+        km.jenis_permintaan,
+        km.kd_dokter,
+        d1.nm_dokter AS dokter_pengirim,
+        km.kd_dokter_dikonsuli,
+        d2.nm_dokter AS dokter_dikonsuli,
+        km.diagnosa_kerja,
+        km.uraian_konsultasi
+     FROM konsultasi_medik km
+     LEFT JOIN dokter d1 ON km.kd_dokter = d1.kd_dokter
+     LEFT JOIN dokter d2 ON km.kd_dokter_dikonsuli = d2.kd_dokter
+     WHERE km.no_rawat = ?`,
+            [formattedNoRawat]
+        );
+
+        return raw;
+    }, {
+        params: t.Object({ no_rawat: t.String() })
+    })
+
+    .get("/tindakan_ralan/:no_rawat", async ({ params }) => {
+        const noRawat = params.no_rawat.replace(/-/g, "/");
+
+        const dokter = await sql(`
+        SELECT 
+            r.tgl_perawatan,
+            r.jam_rawat,
+            r.kd_jenis_prw,
+            j.nm_perawatan,
+            r.biaya_rawat,
+            d.nm_dokter
+        FROM rawat_jl_dr r
+        LEFT JOIN jns_perawatan j ON r.kd_jenis_prw = j.kd_jenis_prw
+        LEFT JOIN dokter d ON r.kd_dokter = d.kd_dokter
+        WHERE r.no_rawat = ?
+        ORDER BY r.tgl_perawatan, r.jam_rawat
+    `, [noRawat]);
+
+
+        const paramedis = await sql(`
+        SELECT 
+            r.tgl_perawatan,
+            r.jam_rawat,
+            r.kd_jenis_prw,
+            j.nm_perawatan,
+            r.biaya_rawat,
+            p.nama AS nama_petugas
+        FROM rawat_jl_pr r
+        LEFT JOIN jns_perawatan j ON r.kd_jenis_prw = j.kd_jenis_prw
+        LEFT JOIN petugas p ON r.nip = p.nip
+        WHERE r.no_rawat = ?
+        ORDER BY r.tgl_perawatan, r.jam_rawat
+    `, [noRawat]);
+
+
+        const dokterParamedis = await sql(`
+        SELECT 
+            r.tgl_perawatan,
+            r.jam_rawat,
+            r.kd_jenis_prw,
+            j.nm_perawatan,
+            r.biaya_rawat,
+            d.nm_dokter,
+            p.nama AS nama_petugas
+        FROM rawat_jl_drpr r
+        LEFT JOIN jns_perawatan j ON r.kd_jenis_prw = j.kd_jenis_prw
+        LEFT JOIN dokter d ON r.kd_dokter = d.kd_dokter
+        LEFT JOIN petugas p ON r.nip = p.nip
+        WHERE r.no_rawat = ?
+        ORDER BY r.tgl_perawatan, r.jam_rawat
+    `, [noRawat]);
+
+
+        return {
+            dokter,
+            paramedis,
+            dokter_paramedis: dokterParamedis
+        };
+
+    }, {
+        params: t.Object({ no_rawat: t.String() })
+    })
+
+    .get("/hemodialisa/:no_rawat", async ({ params }) => {
+        const formattedNoRawat = params.no_rawat.replace(/-/g, "/");
+        const raw = await sql(
+            `SELECT no_rawat, tanggal, kd_dokter, lama, akses, dialist, transfusi, penarikan, qb, qd,ureum,hb,hbsag,creatinin,hiv,hcv,lain,kd_penyakit
+        FROM hemodialisa
+        WHERE no_rawat = ?`,
+            [formattedNoRawat]
+        );
+        return { success: true, data: raw };
+    }, {
+        params: t.Object({ no_rawat: t.String() })
+    })
+
+    .get("/neonatus/:no_rawat", async ({ params }) => {
+        const formattedNoRawat = params.no_rawat.replace(/-/g, "/");
+
+        const raw = await sql(
+            `SELECT 
+            neo.*,
+            rpp.*,
+            d.nm_dokter,
+            pak.intranatal_pb,
+            pak.intranatal_bb,
+            pak.intranatal_lk,
+            pak.intranatal_ld,
+            pak.intranatal_lp,
+            p.nm_pasien AS nama_ibu,
+            p.no_ktp AS ktp_ibu,
+            p.tgl_lahir AS tgl_lahir_ibu
+
+        FROM penilaian_medis_ranap_neonatus AS neo
+        
+        LEFT JOIN riwayat_persalinan_pasien AS rpp
+            ON rpp.no_rkm_medis = neo.no_rkm_medis_ibu
+
+        LEFT JOIN dokter AS d
+            ON d.kd_dokter = neo.kd_dokter
+
+        LEFT JOIN penilaian_awal_keperawatan_ranap_neonatus AS pak
+            ON pak.no_rawat = neo.no_rawat
+
+        LEFT JOIN pasien AS p
+            ON p.no_rkm_medis = neo.no_rkm_medis_ibu
+
+        WHERE neo.no_rawat = ?`,
+            [formattedNoRawat]
+        );
+
+        return { success: true, data: raw };
+    }, {
+        params: t.Object({ no_rawat: t.String() })
+    })
+
 
     .get(
         "/pasien/*",
@@ -278,6 +665,8 @@ const get = new Elysia({ prefix: '/grab' })
       p.pekerjaan,
       p.tgl_lahir,
       p.jk,
+      p.no_ktp,
+      pkl.nm_poli AS nama_poli,
       CASE WHEN n.bb IS NULL THEN '-' ELSE n.bb END AS berat,
       CASE WHEN tb.kesimpulan_skrining = 'Terduga TBC' THEN 1
            ELSE (CASE WHEN nomor_register_sitb IS NOT NULL THEN 1 ELSE 0 END)
@@ -319,9 +708,12 @@ const get = new Elysia({ prefix: '/grab' })
       SUM(CASE WHEN b.status = 'Obat' AND b.nm_perawatan LIKE '%kronis%' THEN b.totalbiaya ELSE 0 END) AS obat_kronis,
       SUM(CASE WHEN b.status = 'Obat' AND b.nm_perawatan LIKE '%kemo%' THEN b.totalbiaya ELSE 0 END) AS obat_kemoterapi,
       0 AS alkes,
+      
       SUM(CASE WHEN b.status = 'Tambahan' THEN b.totalbiaya ELSE 0 END) AS bmhp,
       SUM(CASE WHEN b.status IN ('Harian','Service') THEN b.totalbiaya ELSE 0 END) AS sewa_alat,
-      pl.noorder AS no_lab
+      pl.noorder AS no_lab,
+      ki.kd_kamar AS kamar_terakhir,
+      bgs.nm_bangsal AS nama_bangsal
     `;
 
             try {
@@ -330,19 +722,36 @@ const get = new Elysia({ prefix: '/grab' })
         FROM reg_periksa AS r
         LEFT JOIN pasien AS p ON r.no_rkm_medis = p.no_rkm_medis
         LEFT JOIN bridging_sep AS bs ON r.no_rawat = bs.no_rawat
-        LEFT JOIN kamar_inap AS k ON r.no_rawat = k.no_rawat
-        LEFT JOIN billing AS b ON r.no_rawat = b.no_rawat
-        LEFT JOIN penilaian_medis_ranap_neonatus AS n ON r.no_rawat = n.no_rawat
-        LEFT JOIN skrining_tbc AS tb ON r.no_rawat = tb.no_rawat
-        LEFT JOIN dokter AS d ON r.kd_dokter = d.kd_dokter
-        LEFT JOIN idrg.claims AS cl ON bs.no_sep = cl.nomor_sep
-        LEFT JOIN penilaian_medis_igd AS pi ON r.no_rawat = pi.no_rawat
-        LEFT JOIN penilaian_medis_ralan AS pr ON r.no_rawat = pr.no_rawat
-        LEFT JOIN idrg.sitb ON sitb.nomor_rm = r.no_rkm_medis
-        LEFT JOIN permintaan_lab AS pl ON pl.no_rawat = r.no_rawat
+
+       LEFT JOIN kamar_inap AS k ON r.no_rawat = k.no_rawat
+
+LEFT JOIN (
+  SELECT 
+    k1.no_rawat,
+    k1.kd_kamar
+  FROM kamar_inap k1
+  INNER JOIN (
+      SELECT no_rawat, MAX(CONCAT(tgl_masuk,' ',jam_masuk)) AS max_masuk
+      FROM kamar_inap
+      GROUP BY no_rawat
+  ) k2 ON k1.no_rawat = k2.no_rawat
+     AND CONCAT(k1.tgl_masuk,' ',k1.jam_masuk) = k2.max_masuk
+) AS ki ON ki.no_rawat = r.no_rawat
+
+LEFT JOIN kamar km ON ki.kd_kamar = km.kd_kamar
+LEFT JOIN bangsal bgs ON km.kd_bangsal = bgs.kd_bangsal
+LEFT JOIN billing AS b ON r.no_rawat = b.no_rawat
+LEFT JOIN penilaian_medis_ranap_neonatus AS n ON r.no_rawat = n.no_rawat
+LEFT JOIN skrining_tbc AS tb ON r.no_rawat = tb.no_rawat
+LEFT JOIN dokter AS d ON r.kd_dokter = d.kd_dokter
+LEFT JOIN idrg.claims AS cl ON bs.no_sep = cl.nomor_sep
+LEFT JOIN penilaian_medis_igd AS pi ON r.no_rawat = pi.no_rawat
+LEFT JOIN penilaian_medis_ralan AS pr ON r.no_rawat = pr.no_rawat
+LEFT JOIN idrg.sitb ON sitb.nomor_rm = r.no_rkm_medis
+LEFT JOIN poliklinik AS pkl ON r.kd_poli = pkl.kd_poli
+LEFT JOIN permintaan_lab AS pl ON pl.no_rawat = r.no_rawat
         WHERE r.kd_pj = 'BPJ'
-          AND r.no_rawat = ?
-        GROUP BY r.no_rawat
+        AND r.no_rawat = ?
       `, [params['*']]);
 
                 return { data: raw };
@@ -356,7 +765,6 @@ const get = new Elysia({ prefix: '/grab' })
             })
         }
     )
-
 
     .get(
         "/dokter",
