@@ -3,9 +3,120 @@ import { sql } from "./connection";
 import { authMiddleware } from "./auth";
 import { User } from "./types";
 import { forward } from "./function";
+import { writeFile, mkdir } from "fs/promises";
+import path from "path";
+const UPLOAD_DIR = path.join(process.cwd(), "upload", "berkas");
 
 const post = new Elysia({ prefix: '/send' })
     .use(authMiddleware)
+    .post(
+        "/upload_berkas",
+        async ({ body }) => {
+            const { type_upload, files } = body;
+            if (!files || files.length === 0) {
+                return { error: "Tidak ada file untuk diupload" };
+            }
+            await mkdir(UPLOAD_DIR, { recursive: true });
+            const saved: string[] = [];
+            for (const file of files) {
+                const cleanName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
+
+                const buffer = Buffer.from(await file.arrayBuffer());
+                const savePath = path.join(UPLOAD_DIR, cleanName);
+
+                await writeFile(savePath, buffer);
+                saved.push(cleanName);
+            }
+
+            return {
+                status: "success",
+                message: "Upload berhasil",
+                total_file: saved.length,
+                files: saved,
+                folder: "upload/berkas",
+                type_upload,
+            };
+        },
+        {
+            body: t.Object({
+                type_upload: t.String(),
+                files: t.Files(),
+            }),
+        }
+    )
+
+    //     .post(
+    //     "/upload_berkas",
+    //     async ({ body }) => {
+    //         const { type_upload, files } = body;
+
+    //         if (!files || files.length === 0) {
+    //             return { error: "Tidak ada file untuk diupload" };
+    //         }
+
+    //         await mkdir(UPLOAD_DIR, { recursive: true });
+
+    //         const saved: string[] = [];
+
+    //         for (const file of files) {
+    //             // -------- 1. Ambil nama file asli --------
+    //             const cleanName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
+
+    //             // -------- 2. Ambil nama tanpa ekstensi (anggap sebagai no_sep) ----------
+    //             const noSep = cleanName.replace(/\.[^.]+$/, "");
+
+    //             // -------- 3. Cek SEP di database ----------
+    //             const sep = await db.query(
+    //                 "SELECT * FROM bridging_sep WHERE no_sep = ? LIMIT 1",
+    //                 [noSep]
+    //             );
+
+    //             if (sep.length === 0) {
+    //                 return {
+    //                     status: "failed",
+    //                     message: `SEP ${noSep} tidak ditemukan`,
+    //                     file: cleanName,
+    //                 };
+    //             }
+
+    //             // -------- 4. Simpan file dengan nama HASH / acak ----------
+    //             const ext = path.extname(cleanName);
+    //             const newName = crypto.randomUUID() + ext;
+    //             const savePath = path.join(UPLOAD_DIR, newName);
+
+    //             const buffer = Buffer.from(await file.arrayBuffer());
+    //             await writeFile(savePath, buffer);
+
+    //             // -------- 5. Simpan ke table berkas_upload (mirip updateOrCreate) ----------
+    //             await db.query(
+    //                 `
+    //                 INSERT INTO berkas_upload (no_rawat, no_sep, jenis, filename, is_migrated)
+    //                 VALUES (?, ?, ?, ?, 0)
+    //                 ON DUPLICATE KEY UPDATE filename = VALUES(filename)
+    //                 `,
+    //                 [sep[0].no_rawat, sep[0].no_sep, type_upload, newName]
+    //             );
+
+    //             saved.push(newName);
+    //         }
+
+    //         return {
+    //             status: "success",
+    //             message: "Upload berhasil",
+    //             total_file: saved.length,
+    //             files: saved,
+    //             folder: "upload/berkas",
+    //             type_upload,
+    //         };
+    //     },
+    //     {
+    //         body: t.Object({
+    //             type_upload: t.String(),
+    //             files: t.Files(),
+    //         }),
+    //     }
+    // )
+
     .post("/sitb-validate", async ({ body }) => {
         const data = {
             nomor_register_sitb: body.data.nomor_register_sitb,
@@ -22,6 +133,7 @@ const post = new Elysia({ prefix: '/send' })
     }, {
         body: t.Object({ "data": t.Object({ "nomor_rm": t.String(), "nomor_sep": t.String(), "nomor_register_sitb": t.String() }) })
     })
+
     .post("/sitb-invalidate", async ({ body }) => {
         const data = {
             nomor_sep: body.data.nomor_sep
@@ -294,6 +406,7 @@ const post = new Elysia({ prefix: '/send' })
         },
         { body: t.Object({ "claim_id": t.Number(), "data": t.Object({ "nomor_sep": t.String() }) }) }
     )
+
 
     .post(
         "/re-edit-idrg",

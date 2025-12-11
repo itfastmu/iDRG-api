@@ -8,12 +8,12 @@
         "@types/bcrypt": "^6.0.0",
         "bcrypt": "^6.0.0",
         "elysia": "latest",
-        "mysql2": "^3.15.0",
+        "mysql2": "^3.15.0"
       },
       "devDependencies": {
-        "bun-types": "latest",
-      },
-    },
+        "bun-types": "latest"
+      }
+    }
   },
   "packages": {
     "@borewit/text-codec": ["@borewit/text-codec@0.1.1", "", {}, "sha512-5L/uBxmjaCIX5h8Z+uu+kA9BQLkc/Wl06UGR5ajNRxu+/XjonB5i8JpgFMrPj3LXTCPA0pv8yxUvbUi+QthGGA=="],

@@ -48,9 +48,6 @@ const get = new Elysia({ prefix: '/grab' })
     }, {
         params: t.Object({ no_rawat: t.String() })
     })
-
-
-
     .get("/triase/:no_rawat", async ({ params }) => {
         const formattedNoRawat = params.no_rawat.replace(/-/g, "/");
 
@@ -180,7 +177,6 @@ const get = new Elysia({ prefix: '/grab' })
 
         return { data: rows };
     })
-
     .get("/ralan/:no_rawat", async ({ params }) => {
         const noRawat = params.no_rawat.replace(/-/g, "/");
 
@@ -220,7 +216,6 @@ const get = new Elysia({ prefix: '/grab' })
 
         return { data: rows };
     })
-
     .get("/tindakan/:no_rawat", async ({ params }) => {
         const noRawat = params.no_rawat.replace(/-/g, "/");
 
@@ -249,7 +244,6 @@ const get = new Elysia({ prefix: '/grab' })
 
         return { data: rows };
     })
-
     .get("/igd/:no_rawat", async ({ params }) => {
         const noRawat = params.no_rawat.replace(/-/g, "/");
 
@@ -300,7 +294,6 @@ const get = new Elysia({ prefix: '/grab' })
 
         return { data: rows };
     })
-
     .get("/obat/:no_rawat", async ({ params }) => {
         const formattedNoRawat = params.no_rawat.replace(/-/g, "/");
 
@@ -456,7 +449,6 @@ const get = new Elysia({ prefix: '/grab' })
     }, {
         params: t.Object({ no_rawat: t.String() })
     })
-
     .get("/surat_kontrol/:no_rawat", async ({ params }) => {
         const formattedNoRawat = params.no_rawat.replace(/-/g, "/");
 
@@ -481,7 +473,6 @@ const get = new Elysia({ prefix: '/grab' })
     }, {
         params: t.Object({ no_rawat: t.String() })
     })
-
     .get("/billing/:no_rawat", async ({ params }) => {
         const formattedNoRawat = params.no_rawat.replace(/-/g, "/");
         const raw = await sql(
@@ -495,7 +486,6 @@ const get = new Elysia({ prefix: '/grab' })
     }, {
         params: t.Object({ no_rawat: t.String() })
     })
-
     .get("/medik/:no_rawat", async ({ params }) => {
         const formattedNoRawat = params.no_rawat.replace(/-/g, "/");
 
@@ -522,7 +512,6 @@ const get = new Elysia({ prefix: '/grab' })
     }, {
         params: t.Object({ no_rawat: t.String() })
     })
-
     .get("/tindakan_ralan/:no_rawat", async ({ params }) => {
         const noRawat = params.no_rawat.replace(/-/g, "/");
 
@@ -585,7 +574,6 @@ const get = new Elysia({ prefix: '/grab' })
     }, {
         params: t.Object({ no_rawat: t.String() })
     })
-
     .get("/hemodialisa/:no_rawat", async ({ params }) => {
         const formattedNoRawat = params.no_rawat.replace(/-/g, "/");
         const raw = await sql(
@@ -598,7 +586,6 @@ const get = new Elysia({ prefix: '/grab' })
     }, {
         params: t.Object({ no_rawat: t.String() })
     })
-
     .get("/neonatus/:no_rawat", async ({ params }) => {
         const formattedNoRawat = params.no_rawat.replace(/-/g, "/");
 
@@ -638,8 +625,6 @@ const get = new Elysia({ prefix: '/grab' })
     }, {
         params: t.Object({ no_rawat: t.String() })
     })
-
-
     .get(
         "/pasien/*",
         async ({ params }) => {
@@ -765,7 +750,6 @@ LEFT JOIN permintaan_lab AS pl ON pl.no_rawat = r.no_rawat
             })
         }
     )
-
     .get(
         "/dokter",
         async () => {
