@@ -17,7 +17,6 @@ function jsonToValidator(obj: any): string {
   return "t.Any()";
 }
 
-// 🚀 baca file Postman
 const raw = readFileSync("src/E-KLAIM IDRG.postman_collection.json", "utf-8");
 const collection = JSON.parse(raw);
 

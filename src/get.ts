@@ -27,6 +27,64 @@ const get = new Elysia({ prefix: '/grab' })
         params: t.Object({ type: t.Optional(t.Union([t.Literal("rajal"), t.Literal("ranap")])) }),
         query: t.Object({ mulai: t.Optional(t.String()), sampai: t.Optional(t.String()) })
     })
+    .get(
+        "/dashboard",
+        async ({ query }) => {
+            const { month, year } = query;
+
+            if (!month || !year) {
+                return {
+                    error: true,
+                    message: "month dan year wajib diisi",
+                };
+            }
+            const start = `${year}-${String(month).padStart(2, "0")}-01`;
+            const endMonth = Number(month) === 12 ? 1 : Number(month) + 1;
+            const endYear = Number(month) === 12 ? Number(year) + 1 : Number(year);
+            const end = `${endYear}-${String(endMonth).padStart(2, "0")}-01`;
+
+            const raw = await sql(
+                `
+                SELECT
+                SUM(CASE WHEN status_lanjut = 'Ralan'
+                    AND stts <> 'Batal'
+                    AND kd_pj IN ('A65','A79','BPJ')
+                    THEN 1 ELSE 0 END) AS pasien_ralan,
+
+                SUM(CASE WHEN status_lanjut = 'Ranap'
+                    AND stts <> 'Batal'
+                    AND kd_pj IN ('A65','A79','BPJ')
+                    THEN 1 ELSE 0 END) AS pasien_ranap,
+
+                SUM(CASE WHEN c.id IS NOT NULL AND stts <> 'Batal'
+                    THEN 1 ELSE 0 END) AS sudah_dikirim,
+
+                SUM(CASE WHEN c.id IS NULL AND stts <> 'Batal'
+                    THEN 1 ELSE 0 END) AS belum_dikirim
+
+                FROM reg_periksa
+                LEFT JOIN bridging_sep bs ON reg_periksa.no_rawat = bs.no_rawat
+                LEFT JOIN idrg.claims c ON bs.no_sep = c.nomor_sep
+                WHERE tgl_registrasi >= ?
+                AND tgl_registrasi < ?
+                `,
+                [start, end]
+            );
+
+
+            return {
+                month,
+                year,
+                ...raw[0],
+            };
+        },
+        {
+            query: t.Object({
+                month: t.String(),
+                year: t.String(),
+            }),
+        }
+    )
     .get("/resume/:no_rawat", async ({ params }) => {
         const formattedNoRawat = params.no_rawat.replace(/-/g, "/");
 
@@ -108,10 +166,6 @@ const get = new Elysia({ prefix: '/grab' })
       WHERE d5.no_rawat = ?
       `,
                 [
-                    formattedNoRawat,
-                    formattedNoRawat,
-                    formattedNoRawat,
-                    formattedNoRawat,
                     formattedNoRawat,
                 ]
             );
@@ -240,7 +294,6 @@ const get = new Elysia({ prefix: '/grab' })
         `,
             [noRawat]
         );
-
 
         return { data: rows };
     })
@@ -745,8 +798,13 @@ LEFT JOIN permintaan_lab AS pl ON pl.no_rawat = r.no_rawat
             }
         },
         {
+            // params: t.Object({
+            //     '*': t.RegExp(/^\d{4}\/\d{2}\/\d{2}\/\d{6}$/)
+            // })
             params: t.Object({
-                '*': t.RegExp(/^\d{4}\/\d{2}\/\d{2}\/\d{6}$/)
+                '*': t.String({
+                    pattern: '^\\d{4}/\\d{2}/\\d{2}/\\d{6}$'
+                })
             })
         }
     )
